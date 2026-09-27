@@ -16,7 +16,8 @@ switcher.
   - Wi-Fi networks, then the Wi-Fi band when there is a choice.
   - DNS provider.
   - VPN: the tool, its state, and one row per profile or country, each with its
-    own on/off switch. Switching one on brings the others down first.
+    own on/off switch. Switching one on brings the others down first. With a
+    single VPN tool its name is in the section title ("VPN · NETWORKMANAGER").
   - The QR code and speed test buttons from the stock popup are in the header.
 - **Foldable sections:** Wi-Fi networks, DNS and VPN each have a header you
   can click to fold them away. A folded header keeps a one-line summary, such

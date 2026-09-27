@@ -58,6 +58,10 @@ Column {
   property var pending: null
 
   readonly property bool filterFocused: filterField.activeFocus
+  // One tool in use: its name is in the section title (NetVpn.vpnFoldTitle),
+  // so the header drops the glyph and the name line and keeps only the state
+  // beside the gear. The tool list behind the gear keeps the full header.
+  readonly property bool singleTool: !providersOpen && vpn.availableBackends.length === 1
   readonly property var backend: vpn.active
   readonly property var providerRows: vpn.detectedBackends.map(function(entry) {
     var hidden = vpn.isHidden(entry.backendId)
@@ -364,14 +368,15 @@ Column {
 
   onStopsChanged: if (cursorActive) normalize()
 
-  // ---------- Header: tool glyph · tool + state · settings, gear, switch ----------
+  // ---------- Header: tool glyph · tool + state · settings, gear ----------
   Item {
     id: header
     width: parent.width
-    implicitHeight: Math.max(headerIcon.implicitHeight, headerLabels.implicitHeight, headerActions.implicitHeight)
+    implicitHeight: Math.max(headerIcon.visible ? headerIcon.implicitHeight : 0, headerLabels.implicitHeight, headerActions.implicitHeight)
 
     Text {
       id: headerIcon
+      visible: !section.singleTool
       textFormat: Text.PlainText
       text: section.backend ? section.backend.glyph : Shared.GLYPH_VPN
       color: section.foreground
@@ -417,14 +422,15 @@ Column {
 
     Column {
       id: headerLabels
-      anchors.left: headerIcon.right
-      anchors.leftMargin: Style.space(14)
+      anchors.left: headerIcon.visible ? headerIcon.right : parent.left
+      anchors.leftMargin: headerIcon.visible ? Style.space(14) : 0
       anchors.right: parent.right
       anchors.rightMargin: headerActions.width + Style.space(12)
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(2)
 
       Text {
+        visible: !section.singleTool
         textFormat: Text.PlainText
         width: parent.width
         text: section.providersOpen ? "VPN tools"
@@ -442,10 +448,12 @@ Column {
         text: section.providersOpen ? "Pick which tools this widget uses"
           : (section.backend ? section.backend.summary : "Nothing detected")
         visible: text !== ""
-        color: Qt.darker(section.foreground, 1.4)
+        // Alone on its line it reads as body text, not as a caption to a
+        // title that is not there.
+        color: section.singleTool ? section.foreground : Qt.darker(section.foreground, 1.4)
         font.family: section.fontFamily
-        font.pixelSize: Style.font.caption
-        font.bold: true
+        font.pixelSize: section.singleTool ? Style.font.bodySmall : Style.font.caption
+        font.bold: !section.singleTool
         elide: Text.ElideRight
       }
     }

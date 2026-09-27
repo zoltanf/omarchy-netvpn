@@ -1849,8 +1849,10 @@ Panel {
       SectionFold {
         id: vpnFold
         fold: "vpn"
-        title: "VPN"
-        summary: vpn.barSummary
+        readonly property var toolLabels: vpn.availableBackends.map(function(b) { return b.label })
+        title: NetVpn.vpnFoldTitle(toolLabels)
+        summary: NetVpn.vpnFoldSummary(vpn.barSummary, toolLabels.length === 1,
+          vpn.connectedBackend ? vpn.connectedBackend.summary : "", vpn.anyConnected)
       }
 
       FoldBody {

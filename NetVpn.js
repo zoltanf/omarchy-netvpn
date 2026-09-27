@@ -295,3 +295,22 @@ function formatLinkRate(raw) {
   if (!isFinite(n) || n <= 0) return "--"
   return (n >= 1000 ? (n / 1000).toFixed(1) + " Gbit/s" : Math.round(n) + " Mbit/s")
 }
+
+// ------------------------------------------------------- VPN section title
+
+// With one VPN tool in use, its name belongs in the section title ("VPN ·
+// NETWORKMANAGER") rather than on a line of its own under it. With several,
+// the title stays "VPN" and the chips and the block's own title say which
+// tool is shown. Section headers are set in capitals, like "DNS PROVIDER".
+function vpnFoldTitle(toolLabels) {
+  var labels = toolLabels || []
+  return labels.length === 1 ? "VPN · " + String(labels[0]).toUpperCase() : "VPN"
+}
+
+// The folded header's summary. The controller's summary names the tool
+// ("NetworkManager · work"); when the title already does, only the tunnel is
+// left to say.
+function vpnFoldSummary(barSummary, singleTool, connectedSummary, anyConnected) {
+  if (singleTool && anyConnected) return viaText(connectedSummary, true)
+  return String(barSummary || "")
+}

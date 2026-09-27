@@ -19,7 +19,7 @@ screenshots of the author's machine out of it.
   IPC, the badge shows while connected, the tooltip works, and the
   `shell toggle omarchy.network` keybind route alternates open/closed.
   Disabling the plugin restores `omarchy.network` in the same slot.
-- Tests: `node tests/run.js` (NetVpn.js, 33) and `node vpn/tests/run.js`
+- Tests: `node tests/run.js` (NetVpn.js, 35) and `node vpn/tests/run.js`
   (vendored, 147).
 - v0.3.0 (same day): new order (details, Wi-Fi, band, VPN, DNS), public IP
   in details, details not foldable, Wi-Fi fold decided per open (folded while

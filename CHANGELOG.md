@@ -2,6 +2,10 @@
 
 ## 0.3.0 — 2026-09-27
 
+- With one VPN tool in use, its name moves into the section title
+  ("VPN · NETWORKMANAGER"). The block's header drops the glyph and the name
+  line and keeps only the state and the gear, and the folded summary drops the
+  tool name too. With several tools, nothing changes.
 - DNS moved above VPN and always opens folded. Unfolding it lasts until the
   popup closes; `collapsedSections` now only keeps `vpn`.
 - "IP Address" in the details grid is now "Local IP".

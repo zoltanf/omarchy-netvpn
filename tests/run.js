@@ -281,5 +281,20 @@ test("link rate is rounded, Gbit/s past a thousand", () => {
   eq(N.formatLinkRate("0 MBit/s"), "--")
 })
 
+// ------------------------------------------------------ VPN section title
+
+test("one tool goes into the section title, several keep it plain", () => {
+  eq(N.vpnFoldTitle(["NetworkManager"]), "VPN · NETWORKMANAGER")
+  eq(N.vpnFoldTitle(["Mullvad", "Proton VPN"]), "VPN")
+  eq(N.vpnFoldTitle([]), "VPN")
+  eq(N.vpnFoldTitle(undefined), "VPN")
+})
+
+test("folded summary drops the tool name when the title has it", () => {
+  eq(N.vpnFoldSummary("NetworkManager · work", true, "work", true), "work")
+  eq(N.vpnFoldSummary("NetworkManager · work", false, "work", true), "NetworkManager · work")
+  eq(N.vpnFoldSummary("Not connected", true, "", false), "Not connected")
+})
+
 console.log(passed + " passed, " + failed + " failed")
 process.exit(failed === 0 ? 0 : 1)
