@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0 — 2026-09-27
+
+- New popup order: details, Wi-Fi networks, Wi-Fi band, VPN, DNS.
+- The public IP moved from the VPN section into the details grid.
+- The details grid is no longer foldable.
+- The Wi-Fi list opens folded while Wi-Fi is connected and unfolded while it
+  is not. It unfolds by itself if Wi-Fi drops while the popup is open. This
+  fold is decided per open and no longer saved; `collapsedSections` keeps
+  `vpn` and `dns` only.
+- Every VPN row has its own on/off switch. The single master switch is gone:
+  with several profiles it did nothing but ask you to pick one. Right click on
+  the bar icon and the `v` key still do the tool's default connect.
+- VPN rows keep a stable order. nmcli lists the active profile first, so a
+  connect used to swap rows under the cursor, and the next Enter flipped a
+  different profile. The keyboard cursor now also follows its row by key.
+- Opening onto the VPN section puts the cursor on the first row.
+
 ## 0.2.0 — 2026-09-27
 
 - Foldable popup sections: Details, VPN, DNS provider and Wi-Fi networks each

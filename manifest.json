@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "zoltanf.netvpn",
   "name": "Network + VPN",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Zoltan Fekete",
   "license": "MIT",
   "description": "Omarchy's Wi-Fi/Ethernet widget with VPN status and switching folded in: one bar icon, one popup.",
@@ -78,7 +78,7 @@
         "type": "string",
         "label": "Folded popup sections (comma separated)",
         "defaultValue": "",
-        "description": "Popup sections shown folded: details, vpn, dns, wifi. Also changed by clicking a section header, or with c in the popup."
+        "description": "Popup sections kept folded: vpn, dns. Also changed by clicking a section header, or with c in the popup. The Wi-Fi list is not kept: it opens folded while Wi-Fi is connected."
       }
     ]
   },

@@ -8,15 +8,19 @@ switcher.
 - **Bar icon:** Omarchy's usual Wi-Fi or Ethernet glyph. A small shield appears
   in its corner while a VPN tunnel is up, and shows faintly while one is
   connecting. The tooltip names both, for example `Wi-Fi: Home · VPN: NetworkManager · work`.
-- **Popup:** everything the stock network popup has (connection stats, Wi-Fi
-  band, DNS provider, the Wi-Fi list, the QR code and speed test buttons). A
-  VPN section sits between the stats and the band/DNS rows: a connect switch,
-  your public IP, the tool's details while connected, and the list of
-  profiles or countries to connect to.
-- **Foldable sections:** Details, VPN, DNS and Wi-Fi networks each have a
-  header you can click to fold them away. A folded header keeps a one-line
-  summary, such as the current DNS provider or `Home · 7 networks`. Folds are
-  remembered across opens and restarts.
+- **Popup,** top to bottom:
+  - The connection and its details: ping, traffic, local IP, gateway, and the
+    public IP your traffic leaves by (the VPN's exit while one is up).
+  - Wi-Fi networks, then the Wi-Fi band when there is a choice.
+  - VPN: the tool, its state, and one row per profile or country, each with its
+    own on/off switch. Switching one on brings the others down first.
+  - DNS provider.
+  - The QR code and speed test buttons from the stock popup are in the header.
+- **Foldable sections:** Wi-Fi networks, VPN and DNS each have a header you
+  can click to fold them away. A folded header keeps a one-line summary, such
+  as the current DNS provider or `Home · 7 networks`. The Wi-Fi list opens
+  folded while you are connected to Wi-Fi and open while you are not. VPN and
+  DNS folds are remembered across opens and restarts.
 
 ## VPN tools
 
@@ -63,8 +67,9 @@ omarchy plugin disable zoltanf.netvpn
 VPN, and middle click refreshes both halves.
 
 **Keyboard** (in the popup): `j`/`k` or the arrow keys move between rows and
-sections, `h`/`l` move within a row, and Enter activates. A folded section is a
-single stop, its header, and Enter unfolds it. Also:
+sections, `h`/`l` move within a row, and Enter activates: on a VPN row it
+flips that row's switch. A folded section is a single stop, its header, and
+Enter unfolds it. Also:
 
 | Key | Action |
 |-----|--------|
@@ -108,7 +113,7 @@ Editable in Omarchy's widget settings dialog or in this widget's entry in
 | `favoriteCountries` | `CH,NL,US` | Pinned at the top for Proton VPN, Mullvad, Windscribe |
 | `hiddenBackends` | `""` | Tools the widget ignores. The gear in the VPN section edits this |
 | `profilesDir` | `~/.config/omarchy/vpn/awg-profiles` | Where AmneziaWG profiles are read from |
-| `collapsedSections` | `""` | Folded popup sections: any of `details`, `vpn`, `dns`, `wifi`. Clicking a header or pressing `c` edits this |
+| `collapsedSections` | `""` | Popup sections kept folded: `vpn`, `dns`. Clicking a header or pressing `c` edits this. The Wi-Fi list is not kept: it follows the connection |
 
 The first five are omarchy-vpn's. `collapsedSections` belongs to this plugin.
 
@@ -118,8 +123,8 @@ The first five are omarchy-vpn's. `collapsedSections` belongs to this plugin.
 |------|------|-------|
 | `Panel.qml` | Omarchy 4.0.4 `shell/plugins/panels/network/Panel.qml` | Adds the VPN controller, the VPN section, the badge, section folding, the VPN IPC methods, and a scrollable popup body. The vertical keyboard walk is now table-driven (`NetVpn.stopOrder`) |
 | `NetworkModel.js` | Omarchy 4.0.4 `.../network/Model.js` | Unchanged |
-| `VpnSection.qml` | omarchy-vpn 1.5.0 `Panel.qml` | The popup body rebuilt as a section, with its own cursor |
-| `NetVpn.js` | new | Badge, tooltip, folds and the keyboard walk across sections. Pure JS |
+| `VpnSection.qml` | omarchy-vpn 1.5.0 `Panel.qml` | The popup body rebuilt as a section, with its own cursor and a switch per row instead of one master switch |
+| `NetVpn.js` | new | Badge, tooltip, folds, the keyboard walk across sections, and stable VPN row order. Pure JS |
 | `FoldHeader.qml`, `FoldBody.qml` | new | Section header with chevron and summary, and the animated fold |
 | `vpn/` | omarchy-vpn 1.5.0 (`e0f2d97`) | Unchanged except for the WireGuard probe in `NetworkManagerBackend.qml` |
 

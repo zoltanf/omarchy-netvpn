@@ -52,7 +52,10 @@ Column {
   property bool providersOpen: false
   // The tool's own settings, folded away by default; kept for the session.
   property bool settingsExpanded: false
-  property bool ipCopied: false
+  // A click on a connect row that the tool has not caught up with yet:
+  // { key, on }. The row's switch shows it until the tool agrees, an error
+  // comes back, or a safety timeout passes.
+  property var pending: null
 
   readonly property bool filterFocused: filterField.activeFocus
   readonly property var backend: vpn.active
@@ -67,13 +70,29 @@ Column {
       hidden: hidden
     }
   })
-  readonly property var rows: providersOpen ? providerRows : (backend ? backend.targets : [])
+  // What the tool offers, in the tool's order...
+  readonly property var sourceRows: providersOpen ? providerRows : (backend ? backend.targets : [])
+  // ...and what the panel shows: the same rows in a stable order, so a
+  // connect cannot move a different tunnel's switch under the cursor or the
+  // mouse (see NetVpn.stableOrder). The keyboard cursor follows its row by key.
+  property var rows: []
+  property var _rowRanks: ({})
+
+  function syncRows() {
+    var key = stop === "rows" && rowIndex < rows.length ? String(rows[rowIndex].key) : ""
+    var ordered = NetVpn.stableOrder(sourceRows, _rowRanks)
+    _rowRanks = ordered.ranks
+    rows = ordered.rows
+    if (stop === "rows") rowIndex = NetVpn.followRow(rows, key, rowIndex)
+  }
+
+  onSourceRowsChanged: syncRows()
+  Component.onCompleted: syncRows()
   readonly property var toggles: backend && backend.toggles ? backend.toggles : []
   readonly property bool settingsAvailable: !providersOpen && toggles.length > 0
   readonly property bool settingsVisible: settingsAvailable && settingsExpanded
   readonly property bool switcherVisible: !providersOpen && vpn.availableBackends.length > 1
   readonly property bool filterVisible: !providersOpen && backend !== null && backend.supportsFilter
-  readonly property bool masterSwitchVisible: !providersOpen && backend !== null
   readonly property bool statusIsError: vpn.notice !== ""
     || (backend !== null && backend.lastError !== "" && backend.actionStatus === "")
   readonly property string installHint: {
@@ -97,7 +116,7 @@ Column {
     return backend.actionStatus !== "" ? backend.actionStatus : backend.lastError
   }
 
-  readonly property var headerItems: NetVpn.vpnHeaderItems(settingsAvailable, masterSwitchVisible)
+  readonly property var headerItems: NetVpn.vpnHeaderItems(settingsAvailable)
   readonly property var stops: NetVpn.vpnStops({
     switcher: switcherVisible,
     toggles: settingsVisible && toggles.length > 0,
@@ -105,14 +124,29 @@ Column {
   })
   readonly property var counts: ({ toggles: toggles.length, rows: rows.length })
 
-  // Label/value pairs under the header: the exit address always, then whatever
-  // the tool reports while connected.
-  readonly property var detailRows: {
-    var list = [{ label: "Public IP", value: vpn.ipFetching ? "Checking…" : (vpn.publicIp !== "" ? vpn.publicIp : (vpn.ipFailed ? "unavailable" : "--")), copyable: vpn.publicIp !== "" && !vpn.ipFetching }]
-    if (!providersOpen && backend && backend.details) {
-      for (var i = 0; i < backend.details.length; i++) list.push({ label: backend.details[i].label, value: backend.details[i].value, copyable: false })
-    }
-    return list
+  // What the tool reports about the tunnel while connected. (The public IP
+  // lives in the network details grid above.)
+  readonly property var detailRows: !providersOpen && backend && backend.details ? backend.details : []
+
+  function rowOn(row) {
+    return !!row && !!backend && NetVpn.rowSwitchOn(row.key, backend.currentKey, backend.connected, pending)
+  }
+
+  // Drops the in-flight click once the tool reports the state it asked for.
+  // Called from the backend's change signals rather than bound, since
+  // clearing `pending` from a binding on it is a binding loop.
+  function settlePending() {
+    if (pending !== null && backend
+        && NetVpn.rowSwitchOn(pending.key, backend.currentKey, backend.connected, null) === pending.on)
+      pending = null
+  }
+
+  Timer {
+    // Longer than a VPN handshake plus the controller's ~10s wait for other
+    // tunnels to come down.
+    interval: 20000
+    running: section.pending !== null
+    onTriggered: section.pending = null
   }
 
   function headerHas(item) {
@@ -163,7 +197,6 @@ Column {
       var item = headerItems[headerIndex]
       if (item === "settings") toggleSettings()
       else if (item === "gear") toggleProviders()
-      else if (item === "switch") vpn.toggleActive()
     } else if (stop === "toggles") {
       flipToggle(toggleIndex)
     } else if (stop === "rows") {
@@ -183,10 +216,11 @@ Column {
     return false
   }
 
-  // Every open starts on the connect list, not on the tool list, as upstream.
+  // Every open starts on the connect list, not on the tool list, as upstream,
+  // with the cursor on its first row: toggling a tunnel is why you are here.
   function reset() {
     providersOpen = false
-    stop = "header"
+    stop = rows.length > 0 ? "rows" : "header"
     headerIndex = NetVpn.defaultHeaderIndex(headerItems)
     rowIndex = 0
     toggleIndex = 0
@@ -304,23 +338,14 @@ Column {
       return
     }
     if (!backend) return
-    // Through the controller, never straight to the backend: picking a tunnel
-    // means the others come down first.
-    vpn.connectVia(backend, row)
-  }
-
-  function copyPublicIp() {
-    if (vpn.publicIp === "") return
-    Quickshell.execDetached(["bash", "-c", "printf %s " + Util.shellQuote(vpn.publicIp) + " | wl-copy"])
-    ipCopied = true
-    ipCopiedTimer.restart()
-  }
-
-  Timer {
-    id: ipCopiedTimer
-    interval: 1600
-    repeat: false
-    onTriggered: section.ipCopied = false
+    // Each row is its own switch: on brings that tunnel up, off takes it down.
+    // Both through the controller, never straight to the backend: picking a
+    // tunnel means the others come down first, and a disconnect has to cancel
+    // any connect still queued behind a teardown.
+    var on = NetVpn.rowSwitchOn(row.key, backend.currentKey, backend.connected, null)
+    pending = { key: row.key, on: !on }
+    if (on) vpn.disconnectActive()
+    else vpn.connectVia(backend, row)
   }
 
   // A backend can hand back a command that only works with a human at a
@@ -328,7 +353,13 @@ Column {
   Connections {
     target: section.backend
     ignoreUnknownSignals: true
-    function onAuthRequired(command) { section.runInTerminal(command) }
+    function onAuthRequired(command) {
+      section.pending = null
+      section.runInTerminal(command)
+    }
+    function onLastErrorChanged() { if (section.backend && section.backend.lastError !== "") section.pending = null }
+    function onConnectedChanged() { section.settlePending() }
+    function onCurrentKeyChanged() { section.settlePending() }
   }
 
   onStopsChanged: if (cursorActive) normalize()
@@ -381,26 +412,6 @@ Column {
         Layout.alignment: Qt.AlignVCenter
         onHovered: function(on) { if (on) section.setHeaderCursor("gear") }
         onClicked: section.toggleProviders()
-      }
-
-      ToggleSwitch {
-        id: masterSwitch
-        visible: section.masterSwitchVisible
-        // The tool being looked at, not "anything at all": toggleActive() acts
-        // on the selected backend.
-        checked: section.backend ? section.backend.connected : false
-        busy: section.backend ? section.backend.busy : false
-        hasCursor: section.headerHas("switch")
-        foreground: section.foreground
-        Layout.alignment: Qt.AlignVCenter
-        onHovered: function(on) { if (on) section.setHeaderCursor("switch") }
-        onToggled: section.vpn.toggleActive()
-
-        PanelToolTip {
-          visible: masterSwitch.containsMouse
-          text: masterSwitch.checked ? "Disconnect" : "Connect"
-          fontFamily: section.fontFamily
-        }
       }
     }
 
@@ -488,7 +499,7 @@ Column {
   // Label left, value right, one pair per row. The pair count moves with the
   // tool and the connection, which a fixed four-column grid would leave ragged.
   GridLayout {
-    visible: !section.providersOpen
+    visible: section.detailRows.length > 0
     width: parent.width
     columns: 2
     columnSpacing: Style.space(20)
@@ -501,7 +512,6 @@ Column {
         required property int index
         readonly property var entry: section.detailRows[Math.floor(index / 2)]
         readonly property bool isValue: index % 2 === 1
-        readonly property bool copyable: isValue && entry && entry.copyable === true
 
         textFormat: Text.PlainText
         text: entry ? (isValue ? String(entry.value) : String(entry.label)) : ""
@@ -512,21 +522,6 @@ Column {
         elide: Text.ElideRight
         horizontalAlignment: isValue ? Text.AlignRight : Text.AlignLeft
         Layout.fillWidth: isValue
-
-        MouseArea {
-          id: valueMouse
-          anchors.fill: parent
-          enabled: parent.copyable
-          hoverEnabled: enabled
-          cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-          onClicked: section.copyPublicIp()
-        }
-
-        PanelToolTip {
-          visible: valueMouse.enabled && valueMouse.containsMouse
-          text: section.ipCopied ? "Copied" : "Copy public IP"
-          fontFamily: section.fontFamily
-        }
       }
     }
   }
@@ -624,10 +619,9 @@ Column {
     readonly property bool isProvider: row !== null && row.hidden !== undefined
     readonly property bool rowMuted: (isProvider && row.hidden === true)
       || (row !== null && row.blocked === true)
-    readonly property bool isCurrent: !isProvider
-      && section.backend !== null
-      && row
-      && row.key === section.backend.currentKey
+    readonly property bool isCurrent: !isProvider && section.rowOn(row)
+    readonly property bool isPending: !isProvider && section.pending !== null
+      && row !== null && section.pending.key === row.key
 
     hasCursor: section.cursorActive && section.stop === "rows" && section.rowIndex === cursorIndex
     current: isCurrent
@@ -684,18 +678,11 @@ Column {
         }
       }
 
-      Text {
-        visible: targetRow.isCurrent
-        text: Shared.GLYPH_CHECK
-        color: section.foreground
-        font.family: section.fontFamily
-        font.pixelSize: Style.font.icon
-        Layout.alignment: Qt.AlignVCenter
-      }
-
+      // Provider rows: whether the widget uses that tool. Connect rows: whether
+      // that tunnel is up, and flipping it connects or disconnects.
       ToggleSwitch {
-        visible: targetRow.isProvider
-        checked: targetRow.isProvider && !targetRow.row.hidden
+        checked: targetRow.isProvider ? !targetRow.row.hidden : targetRow.isCurrent
+        busy: targetRow.isPending
         foreground: section.foreground
         // The row owns the click and the cursor ring.
         interactive: false

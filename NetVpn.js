@@ -34,22 +34,19 @@ function barTooltip(kind, ssid, vpnSummary) {
 }
 
 // The VPN block's header row, left to right. The settings chevron only exists
-// for a tool with settings of its own, and the master switch only while a tool
-// is there to switch; the gear is always there, because it is the way back
-// from a widget with every tool hidden.
-function vpnHeaderItems(settingsAvailable, switchVisible) {
+// for a tool with settings of its own; the gear is always there, because it
+// is the way back from a widget with every tool hidden. There is no master
+// switch: each connect row carries its own.
+function vpnHeaderItems(settingsAvailable) {
   var items = []
   if (settingsAvailable) items.push("settings")
   items.push("gear")
-  if (switchVisible) items.push("switch")
   return items
 }
 
-// Where the cursor lands on the header by default: the master switch, which is
-// what the row is for, else whatever is rightmost.
+// Where the cursor lands on the header by default: the rightmost item.
 function defaultHeaderIndex(items) {
-  var index = items.indexOf("switch")
-  return index >= 0 ? index : Math.max(0, items.length - 1)
+  return Math.max(0, (items || []).length - 1)
 }
 
 // The VPN block's cursor stops, top to bottom. "toggles" and "rows" are lists;
@@ -134,17 +131,22 @@ function vpnMove(state, dy, stops, counts) {
 
 // ------------------------------------------------------------- folding
 
-// Sections the popup can fold, top to bottom. The band row is not one of
-// them: it already hides itself whenever there is nothing to pick.
-var FOLDABLE = ["details", "vpn", "dns", "wifi"]
+// Sections the popup can fold, top to bottom. The details grid always shows,
+// and the band row hides itself whenever there is nothing to pick.
+var FOLDABLE = ["wifi", "vpn", "dns"]
+
+// The ones whose fold is remembered. Wi-Fi is not: it opens folded while
+// Wi-Fi is connected and unfolded while it is not, decided on every open,
+// because the network list is what you want exactly when you are offline.
+var PERSISTED_FOLDS = ["vpn", "dns"]
 
 // The `collapsedSections` setting is a comma list, like `hiddenBackends`, so
-// Omarchy's settings dialog can edit it as a plain string. Unknown names and
-// repeats are dropped, and the result is in panel order whatever order it was
-// written in.
+// Omarchy's settings dialog can edit it as a plain string. Unknown names,
+// repeats and non-persisted sections are dropped, and the result is in panel
+// order whatever order it was written in.
 function parseFolds(raw) {
   var wanted = String(raw || "").split(",").map(function(part) { return part.trim().toLowerCase() })
-  return FOLDABLE.filter(function(id) { return wanted.indexOf(id) !== -1 })
+  return PERSISTED_FOLDS.filter(function(id) { return wanted.indexOf(id) !== -1 })
 }
 
 function joinFolds(list) {
@@ -155,29 +157,33 @@ function toggleFold(list, id) {
   var current = parseFolds((list || []).join(","))
   var at = current.indexOf(id)
   if (at !== -1) current.splice(at, 1)
-  else if (FOLDABLE.indexOf(id) !== -1) current.push(id)
+  else if (PERSISTED_FOLDS.indexOf(id) !== -1) current.push(id)
   return parseFolds(current.join(","))
 }
 
-// The panel's keyboard stops, top to bottom. A folded section is one stop,
-// its header ("fold:<id>"), whose Enter unfolds it; an unfolded section is
-// its own content. The details grid has nothing to select, so it is a stop
-// only while folded. Sections not on screen are left out.
+// Whether the Wi-Fi list opens folded: only while Wi-Fi is connected.
+function wifiFoldedOnOpen(wifiConnected) {
+  return wifiConnected === true
+}
+
+// The panel's keyboard stops, top to bottom, in the popup's order: header
+// actions, Wi-Fi networks, band, VPN, DNS. A folded section is one stop, its
+// header ("fold:<id>"), whose Enter unfolds it; an unfolded section is its own
+// content. Sections not on screen are left out.
 //
-//   s = { headerActions, details, band, wifi, wifiRows, folds }
+//   s = { headerActions, band, wifi, wifiRows, folds }
 function stopOrder(s) {
   var folds = s && s.folds ? s.folds : []
   var folded = function(id) { return folds.indexOf(id) !== -1 }
   var order = []
   if (s.headerActions) order.push("header")
-  if (s.details && folded("details")) order.push("fold:details")
-  order.push(folded("vpn") ? "fold:vpn" : "vpn")
-  if (s.band) order.push("band")
-  order.push(folded("dns") ? "fold:dns" : "dns")
   if (s.wifi) {
     if (folded("wifi")) order.push("fold:wifi")
     else if (s.wifiRows) order.push("wifi")
   }
+  if (s.band) order.push("band")
+  order.push(folded("vpn") ? "fold:vpn" : "vpn")
+  order.push(folded("dns") ? "fold:dns" : "dns")
   return order
 }
 
@@ -209,3 +215,45 @@ function foldOf(stop) {
 // Chevron right while folded, down while open, the usual disclosure pair.
 var GLYPH_FOLDED = String.fromCodePoint(0xF0142)
 var GLYPH_UNFOLDED = String.fromCodePoint(0xF0140)
+
+// ------------------------------------------------------------ VPN rows
+
+// Whether a connect row's switch reads on. While a click on that row is in
+// flight the switch shows what was asked for, so it answers the click at once
+// instead of a poll later; otherwise it shows whether the row is the tunnel
+// that is up.
+function rowSwitchOn(rowKey, currentKey, connected, pending) {
+  if (pending && pending.key === rowKey) return pending.on === true
+  return connected === true && rowKey !== "" && rowKey === currentKey
+}
+
+// Rows keep the place they were first seen in. Tools reorder on their own —
+// nmcli lists active connections first — and with a switch on every row, a
+// connect that moves rows under the cursor or the mouse turns the next click
+// into a click on a different tunnel. `ranks` maps key → first-seen position;
+// new keys go after everything known, in the order the tool gave them.
+// Returns the reordered rows and the updated ranks (the input is not changed).
+function stableOrder(list, ranks) {
+  var next = {}
+  var top = -1
+  for (var key in ranks || {}) {
+    next[key] = ranks[key]
+    if (ranks[key] > top) top = ranks[key]
+  }
+  var rows = (list || []).slice()
+  for (var i = 0; i < rows.length; i++) {
+    var k = String(rows[i] && rows[i].key)
+    if (next[k] === undefined) next[k] = ++top
+  }
+  rows.sort(function(a, b) { return next[String(a.key)] - next[String(b.key)] })
+  return { rows: rows, ranks: next }
+}
+
+// Where the cursor goes after the list changed: the row it was on, found by
+// key, else the same index pulled inside the list.
+function followRow(rows, key, index) {
+  for (var i = 0; i < (rows || []).length; i++) {
+    if (key !== "" && String(rows[i].key) === key) return i
+  }
+  return Math.max(0, Math.min((rows || []).length - 1, index))
+}

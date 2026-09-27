@@ -95,7 +95,6 @@ Panel {
     else if (focusSection === "band") scrollPanelTo(bandSection)
     else if (focusSection === "dns") scrollPanelTo(dnsSection)
     else if (focusSection === "wifi") scrollPanelTo(networkList)
-    else if (focusSection === "fold:details") scrollPanelTo(detailsFold)
     else if (focusSection === "fold:vpn") scrollPanelTo(vpnFold)
     else if (focusSection === "fold:dns") scrollPanelTo(dnsFold)
     else if (focusSection === "fold:wifi") scrollPanelTo(wifiFold)
@@ -105,7 +104,11 @@ Panel {
 
   // Sections the user folded away, kept in this widget's shell.json entry as
   // `collapsedSections` so they stay folded across opens and restarts.
-  readonly property var folds: NetVpn.parseFolds(settings ? settings.collapsedSections : "")
+  readonly property var savedFolds: NetVpn.parseFolds(settings ? settings.collapsedSections : "")
+  // The Wi-Fi list is folded per open instead: folded while Wi-Fi is
+  // connected, open while it is not (see onOpenedChanged).
+  property bool wifiFolded: false
+  readonly property var folds: wifiFolded ? ["wifi"].concat(savedFolds) : savedFolds
 
   function isFolded(id) {
     return folds.indexOf(id) !== -1
@@ -116,7 +119,8 @@ Panel {
   // pointing at something that just disappeared.
   function toggleFold(id) {
     var cursorInside = cursorActive && NetVpn.foldOf(focusSection) === id
-    saveSetting("collapsedSections", NetVpn.joinFolds(NetVpn.toggleFold(folds, id)))
+    if (id === "wifi") wifiFolded = !wifiFolded
+    else saveSetting("collapsedSections", NetVpn.joinFolds(NetVpn.toggleFold(savedFolds, id)))
     if (isFolded(id)) {
       if (cursorInside) focusSection = "fold:" + id
     } else if (focusSection === "fold:" + id) {
@@ -129,14 +133,15 @@ Panel {
   // The keyboard stops on screen, top to bottom (see NetVpn.stopOrder).
   readonly property var stopOrder: NetVpn.stopOrder({
     headerActions: headerActionCount > 0,
-    details: !!info.iface,
     band: canSelectBand,
     wifi: wifiStationAvailable,
     wifiRows: wifiNetworks.length > 0,
     folds: folds
   })
 
-  readonly property var preferredStops: ["wifi", "fold:wifi", "dns", "fold:dns"]
+  // An open lands on the Wi-Fi list when it is unfolded (offline, picking a
+  // network), otherwise on the VPN rows.
+  readonly property var preferredStops: ["wifi", "vpn", "fold:vpn", "dns", "fold:dns", "fold:wifi"]
 
   // A section can vanish under the cursor (Wi-Fi off, band row gone, a fold);
   // the cursor then moves to where an open would have put it.
@@ -146,6 +151,11 @@ Panel {
   }
 
   onStopOrderChanged: normalizeFocus()
+
+  // Losing Wi-Fi while the popup is open unfolds the list, since picking a
+  // network is now the likely next move. Connecting never folds it: that
+  // would pull the list out from under the click.
+  onConnectedWifiNetworkChanged: if (opened && !connectedWifiNetwork) wifiFolded = false
 
   // One step inside the current stop. False when the step runs off its edge.
   function moveWithin(dy) {
@@ -539,6 +549,7 @@ Panel {
       refresh(true)
       selectedIndex = wifiNetworks.length > 0 ? 0 : -1
       wifiActionFocused = false
+      wifiFolded = NetVpn.wifiFoldedOnOpen(!!connectedWifiNetwork)
       focusSection = NetVpn.defaultStop(stopOrder, preferredStops)
       var idx = dnsProviders.indexOf(dnsProvider)
       dnsIndex = idx >= 0 ? idx : 0
@@ -1467,18 +1478,11 @@ Panel {
 
       }
 
-      // Connection details: transfer metrics first, then IP/Gateway.
-      SectionFold {
-        id: detailsFold
-        fold: "details"
+      // Connection details: transfer metrics first, then IP/Gateway, then the
+      // public address traffic leaves by (through the VPN when one is up).
+      Column {
         visible: !!root.info.iface
-        title: "DETAILS"
-        summary: root.info.ip ? root.formatPingLatency(root.internetPingLatency) + " · " + root.info.ip : ""
-      }
-
-      FoldBody {
-        folded: root.isFolded("details")
-        shown: !!root.info.iface
+        width: parent.width
         spacing: Style.spacing.labelGap
 
         GridLayout {
@@ -1524,38 +1528,100 @@ Panel {
             copyable: !!root.info.gateway
             tooltipText: "Copy gateway"
           }
+
+          // netvpn: fetched by the VPN controller on connection changes, not
+          // polled (see vpn/VpnController.qml).
+          InfoLabel { text: "Public IP" }
+          DetailValue {
+            text: vpn.ipFetching ? "Checking…" : (vpn.publicIp !== "" ? vpn.publicIp : (vpn.ipFailed ? "unavailable" : "--"))
+            copyable: vpn.publicIp !== "" && !vpn.ipFetching
+            tooltipText: "Copy public IP"
+          }
         }
       }
 
-      // ---------- VPN (netvpn) ----------
+      // Wi-Fi networks (only if a Wi-Fi station is available).
       PanelSeparator {
+        visible: root.wifiStationAvailable
         foreground: root.bar.foreground
       }
 
       SectionFold {
-        id: vpnFold
-        fold: "vpn"
-        title: "VPN"
-        summary: vpn.barSummary
+        id: wifiFold
+        fold: "wifi"
+        visible: root.wifiStationAvailable
+        title: "WI-FI NETWORKS"
+        summary: {
+          var n = root.wifiNetworks.length
+          var here = root.connectedWifiNetwork ? root.connectedWifiNetwork.name + " · " : ""
+          return here + n + (n === 1 ? " network" : " networks")
+        }
       }
 
       FoldBody {
-        folded: root.isFolded("vpn")
+        folded: root.isFolded("wifi")
+        shown: root.wifiStationAvailable
+        spacing: Style.space(8)
 
-      VpnSection {
-        id: vpnSection
+      PanelSectionHeader {
+        visible: root.wifiStationAvailable && root.scanning
+        text: "SCANNING WI-FI…"
+        foreground: root.bar.foreground
+        fontFamily: root.bar.fontFamily
+      }
+
+      // Scrollable network list — cap the height so a busy neighbourhood
+      // doesn't push the popup off-screen. ListView (vs Repeater+Column)
+      // gives us positionViewAtIndex for free, which is what keeps the
+      // keyboard-selected row scrolled into view as j/k walk past the
+      // visible window.
+      ListView {
+        id: networkList
+        visible: root.wifiStationAvailable
         width: parent.width
-        vpn: vpn
-        bar: root.bar
-        settings: root.settings
-        cursorActive: root.cursorActive && root.focusSection === "vpn"
-        onCursorClaimed: {
-          root.cursorActive = true
-          root.focusSection = "vpn"
+        height: Math.min(contentHeight, Style.space(240))
+        spacing: Style.space(4)
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: contentHeight > height
+
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+        model: root.wifiStationAvailable ? root.wifiNetworks : []
+        currentIndex: root.selectedIndex
+        onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
+
+        // Wrapper takes the required props from ListView's delegate context
+        // (which doesn't bind into nested `component` declarations like
+        // NetworkRow) and passes them down explicitly.
+        delegate: Item {
+          required property var modelData
+          required property int index
+          readonly property string sectionTitle: root.wifiSectionTitle(index)
+          width: ListView.view.width
+          height: delegateColumn.implicitHeight
+
+          Column {
+            id: delegateColumn
+            width: parent.width
+            spacing: Style.space(4)
+
+            PanelSectionHeader {
+              visible: sectionTitle !== ""
+              text: sectionTitle
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              height: visible ? implicitHeight : 0
+            }
+
+            NetworkRow {
+              id: row
+              width: parent.width
+              net: modelData
+              index: parent.parent.index
+            }
+          }
         }
-        onSaveSetting: function(key, value) { root.saveSetting(key, value) }
-        onRunInTerminal: function(command) { root.runInTerminal(command) }
-        onFocusReturned: keyCatcher.forceActiveFocus()
       }
       }
 
@@ -1691,6 +1757,38 @@ Panel {
 
       }
 
+      // ---------- VPN (netvpn) ----------
+      PanelSeparator {
+        foreground: root.bar.foreground
+      }
+
+      SectionFold {
+        id: vpnFold
+        fold: "vpn"
+        title: "VPN"
+        summary: vpn.barSummary
+      }
+
+      FoldBody {
+        folded: root.isFolded("vpn")
+
+      VpnSection {
+        id: vpnSection
+        width: parent.width
+        vpn: vpn
+        bar: root.bar
+        settings: root.settings
+        cursorActive: root.cursorActive && root.focusSection === "vpn"
+        onCursorClaimed: {
+          root.cursorActive = true
+          root.focusSection = "vpn"
+        }
+        onSaveSetting: function(key, value) { root.saveSetting(key, value) }
+        onRunInTerminal: function(command) { root.runInTerminal(command) }
+        onFocusReturned: keyCatcher.forceActiveFocus()
+      }
+      }
+
       // DNS provider selection.
       PanelSeparator {
         foreground: root.bar.foreground
@@ -1752,92 +1850,6 @@ Panel {
           }
         }
         }
-      }
-
-
-      // Wi-Fi networks (only if a Wi-Fi station is available).
-      PanelSeparator {
-        visible: root.wifiStationAvailable
-        foreground: root.bar.foreground
-      }
-
-      SectionFold {
-        id: wifiFold
-        fold: "wifi"
-        visible: root.wifiStationAvailable
-        title: "WI-FI NETWORKS"
-        summary: {
-          var n = root.wifiNetworks.length
-          var here = root.connectedWifiNetwork ? root.connectedWifiNetwork.name + " · " : ""
-          return here + n + (n === 1 ? " network" : " networks")
-        }
-      }
-
-      FoldBody {
-        folded: root.isFolded("wifi")
-        shown: root.wifiStationAvailable
-        spacing: Style.space(8)
-
-      PanelSectionHeader {
-        visible: root.wifiStationAvailable && root.scanning
-        text: "SCANNING WI-FI…"
-        foreground: root.bar.foreground
-        fontFamily: root.bar.fontFamily
-      }
-
-      // Scrollable network list — cap the height so a busy neighbourhood
-      // doesn't push the popup off-screen. ListView (vs Repeater+Column)
-      // gives us positionViewAtIndex for free, which is what keeps the
-      // keyboard-selected row scrolled into view as j/k walk past the
-      // visible window.
-      ListView {
-        id: networkList
-        visible: root.wifiStationAvailable
-        width: parent.width
-        height: Math.min(contentHeight, Style.space(240))
-        spacing: Style.space(4)
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        interactive: contentHeight > height
-
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-        model: root.wifiStationAvailable ? root.wifiNetworks : []
-        currentIndex: root.selectedIndex
-        onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
-
-        // Wrapper takes the required props from ListView's delegate context
-        // (which doesn't bind into nested `component` declarations like
-        // NetworkRow) and passes them down explicitly.
-        delegate: Item {
-          required property var modelData
-          required property int index
-          readonly property string sectionTitle: root.wifiSectionTitle(index)
-          width: ListView.view.width
-          height: delegateColumn.implicitHeight
-
-          Column {
-            id: delegateColumn
-            width: parent.width
-            spacing: Style.space(4)
-
-            PanelSectionHeader {
-              visible: sectionTitle !== ""
-              text: sectionTitle
-              foreground: root.bar.foreground
-              fontFamily: root.bar.fontFamily
-              height: visible ? implicitHeight : 0
-            }
-
-            NetworkRow {
-              id: row
-              width: parent.width
-              net: modelData
-              index: parent.parent.index
-            }
-          }
-        }
-      }
       }
     }
     }

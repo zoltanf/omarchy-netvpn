@@ -19,8 +19,15 @@ screenshots of the author's machine out of it.
   IPC, the badge shows while connected, the tooltip works, and the
   `shell toggle omarchy.network` keybind route alternates open/closed.
   Disabling the plugin restores `omarchy.network` in the same slot.
-- Tests: `node tests/run.js` (NetVpn.js, 23) and `node vpn/tests/run.js`
+- Tests: `node tests/run.js` (NetVpn.js, 30) and `node vpn/tests/run.js`
   (vendored, 147).
+- v0.3.0 (same day): new order (details, Wi-Fi, band, VPN, DNS), public IP
+  in details, details not foldable, Wi-Fi fold decided per open (folded while
+  Wi-Fi is connected), a switch per VPN row instead of the master switch,
+  stable VPN row order. Verified live: layout, keyboard on/off of a VPN row
+  (cursor stays on the row), and unfolding the Wi-Fi list by keyboard. The
+  "Wi-Fi disconnected → list unfolded" path was not exercised live: it would
+  drop the machine's connection.
 - v0.2.0 (same day) added foldable sections. Verified live: folding and
   unfolding by keyboard, summaries, the cursor parking on a folded header,
   persistence across a shell restart, and a settings write not closing the
@@ -71,6 +78,17 @@ screenshots of the author's machine out of it.
   profile, not the LAN-only one, which would route the home LAN through the
   VPS. Arm a `systemd-run --user --on-active=45 … nmcli connection down …`
   safety timer first.
+
+- **VPN rows reorder at the source.** `nmcli connection show` lists active
+  connections first, so NetworkManager targets swap places on connect. In
+  0.3.0 testing this moved the LAN-only profile under the cursor, and the next Enter
+  connected it (on the home LAN, for about 10 s). `VpnSection.syncRows` now
+  pins the order (`NetVpn.stableOrder`) and the cursor follows by key. Do not
+  bind `rows` straight to `backend.targets` again. When testing connects, keep
+  the script checking which profile is up after each step.
+- Clearing `pending` from a binding on `pending` is a QML binding loop
+  (logged as a warning). `settlePending()` runs from the backend's
+  `connected`/`currentKey` change signals instead.
 
 ## Open items
 

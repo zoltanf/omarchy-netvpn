@@ -66,16 +66,28 @@ test("tooltip drops the VPN half when there is nothing to say", () => {
 
 // ------------------------------------------------------------ header row
 
-test("header always has the gear, the rest only when they apply", () => {
-  eq(N.vpnHeaderItems(false, false), ["gear"])
-  eq(N.vpnHeaderItems(false, true), ["gear", "switch"])
-  eq(N.vpnHeaderItems(true, true), ["settings", "gear", "switch"])
+test("header always has the gear, settings only for a tool with some", () => {
+  eq(N.vpnHeaderItems(false), ["gear"])
+  eq(N.vpnHeaderItems(true), ["settings", "gear"])
 })
 
-test("header cursor defaults to the switch, else the rightmost item", () => {
-  eq(N.defaultHeaderIndex(["settings", "gear", "switch"]), 2)
+test("header cursor defaults to the rightmost item", () => {
+  eq(N.defaultHeaderIndex(["settings", "gear"]), 1)
   eq(N.defaultHeaderIndex(["gear"]), 0)
   eq(N.defaultHeaderIndex([]), 0)
+})
+
+test("a row switch follows the tunnel that is up", () => {
+  eq(N.rowSwitchOn("p1", "p1", true, null), true)
+  eq(N.rowSwitchOn("p2", "p1", true, null), false)
+  eq(N.rowSwitchOn("p1", "p1", false, null), false)
+  eq(N.rowSwitchOn("", "", true, null), false)
+})
+
+test("a row switch shows the click in flight", () => {
+  eq(N.rowSwitchOn("p2", "p1", true, { key: "p2", on: true }), true)
+  eq(N.rowSwitchOn("p1", "p1", true, { key: "p1", on: false }), false)
+  eq(N.rowSwitchOn("p1", "p1", true, { key: "p2", on: true }), true)
 })
 
 // --------------------------------------------------------------- cursor
@@ -148,44 +160,50 @@ test("no vertical step is a no-op", () => {
 
 // -------------------------------------------------------------- folding
 
-test("folds parse to known sections, in panel order", () => {
-  eq(N.parseFolds("wifi, DNS ,bogus,,wifi"), ["dns", "wifi"])
+test("folds parse to the remembered sections, in panel order", () => {
+  eq(N.parseFolds("dns, VPN ,bogus,,dns"), ["vpn", "dns"])
+  eq(N.parseFolds("wifi,details"), [])
   eq(N.parseFolds(""), [])
   eq(N.parseFolds(undefined), [])
 })
 
-test("toggling adds and removes one section", () => {
+test("toggling adds and removes one remembered section", () => {
   eq(N.toggleFold([], "vpn"), ["vpn"])
   eq(N.toggleFold(["vpn", "dns"], "vpn"), ["dns"])
-  eq(N.toggleFold(["wifi"], "details"), ["details", "wifi"])
+  eq(N.toggleFold(["dns"], "vpn"), ["vpn", "dns"])
+  eq(N.toggleFold([], "wifi"), [])
   eq(N.toggleFold([], "band"), [])
-  eq(N.joinFolds(["wifi", "vpn"]), "vpn,wifi")
+  eq(N.joinFolds(["dns", "vpn"]), "vpn,dns")
 })
 
-const FULL = { headerActions: true, details: true, band: true, wifi: true, wifiRows: true, folds: [] }
+test("the Wi-Fi list opens folded only while Wi-Fi is connected", () => {
+  eq(N.wifiFoldedOnOpen(true), true)
+  eq(N.wifiFoldedOnOpen(false), false)
+})
 
-test("unfolded order matches the panel, details has no stop", () => {
-  eq(N.stopOrder(FULL), ["header", "vpn", "band", "dns", "wifi"])
+const FULL = { headerActions: true, band: true, wifi: true, wifiRows: true, folds: [] }
+
+test("unfolded order matches the popup: Wi-Fi under the header", () => {
+  eq(N.stopOrder(FULL), ["header", "wifi", "band", "vpn", "dns"])
 })
 
 test("folded sections become header stops", () => {
-  eq(N.stopOrder(Object.assign({}, FULL, { folds: ["details", "vpn", "dns", "wifi"] })),
-    ["header", "fold:details", "fold:vpn", "band", "fold:dns", "fold:wifi"])
+  eq(N.stopOrder(Object.assign({}, FULL, { folds: ["wifi", "vpn", "dns"] })),
+    ["header", "fold:wifi", "band", "fold:vpn", "fold:dns"])
 })
 
 test("sections off screen are left out", () => {
-  eq(N.stopOrder({ headerActions: false, details: false, band: false, wifi: false, folds: ["details", "wifi"] }),
-    ["vpn", "dns"])
-  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false })), ["header", "vpn", "band", "dns"])
-  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false, folds: ["wifi"] })), ["header", "vpn", "band", "dns", "fold:wifi"])
+  eq(N.stopOrder({ headerActions: false, band: false, wifi: false, folds: ["wifi"] }), ["vpn", "dns"])
+  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false })), ["header", "band", "vpn", "dns"])
+  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false, folds: ["wifi"] })), ["header", "fold:wifi", "band", "vpn", "dns"])
 })
 
 test("neighbours step through the order and stop at the ends", () => {
   const order = N.stopOrder(FULL)
-  eq(N.neighbourStop(order, "vpn", 1), "band")
-  eq(N.neighbourStop(order, "vpn", -1), "header")
+  eq(N.neighbourStop(order, "wifi", 1), "band")
+  eq(N.neighbourStop(order, "vpn", -1), "band")
   eq(N.neighbourStop(order, "header", -1), "")
-  eq(N.neighbourStop(order, "wifi", 1), "")
+  eq(N.neighbourStop(order, "dns", 1), "")
   eq(N.neighbourStop(order, "missing", 1), "")
 })
 
@@ -199,7 +217,42 @@ test("foldOf names the section of a stop", () => {
   eq(N.foldOf("fold:vpn"), "vpn")
   eq(N.foldOf("wifi"), "wifi")
   eq(N.foldOf("band"), "")
+  eq(N.foldOf("details"), "")
   eq(N.foldOf("header"), "")
+})
+
+// ------------------------------------------------------------ row order
+
+const keys = rows => rows.map(r => r.key)
+
+test("rows keep the order they were first seen in", () => {
+  let r = N.stableOrder([{ key: "a" }, { key: "b" }], {})
+  eq(keys(r.rows), ["a", "b"])
+  // nmcli moves the active profile to the top: the panel does not follow.
+  r = N.stableOrder([{ key: "b" }, { key: "a" }], r.ranks)
+  eq(keys(r.rows), ["a", "b"])
+})
+
+test("new rows go after the known ones, in the tool's order", () => {
+  let r = N.stableOrder([{ key: "a" }, { key: "b" }], {})
+  r = N.stableOrder([{ key: "d" }, { key: "b" }, { key: "c" }, { key: "a" }], r.ranks)
+  eq(keys(r.rows), ["a", "b", "d", "c"])
+})
+
+test("stableOrder leaves its inputs alone", () => {
+  const list = [{ key: "b" }, { key: "a" }]
+  const ranks = { a: 0, b: 1 }
+  N.stableOrder(list, ranks)
+  eq(keys(list), ["b", "a"])
+  eq(ranks, { a: 0, b: 1 })
+})
+
+test("the cursor follows its row by key", () => {
+  const rows = [{ key: "a" }, { key: "b" }, { key: "c" }]
+  eq(N.followRow(rows, "c", 0), 2)
+  eq(N.followRow(rows, "gone", 5), 2)
+  eq(N.followRow(rows, "", 1), 1)
+  eq(N.followRow([], "a", 3), 0)
 })
 
 console.log(passed + " passed, " + failed + " failed")
