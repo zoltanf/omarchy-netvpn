@@ -78,7 +78,7 @@
         "type": "string",
         "label": "Folded popup sections (comma separated)",
         "defaultValue": "",
-        "description": "Popup sections kept folded: vpn, dns. Also changed by clicking a section header, or with c in the popup. The Wi-Fi list is not kept: it opens folded while Wi-Fi is connected."
+        "description": "Popup sections kept folded: vpn. Also changed by clicking the VPN header, or with c in the popup. Wi-Fi and DNS are decided on every open: DNS always starts folded, Wi-Fi while it is connected."
       }
     ]
   },

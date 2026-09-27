@@ -160,50 +160,53 @@ test("no vertical step is a no-op", () => {
 
 // -------------------------------------------------------------- folding
 
-test("folds parse to the remembered sections, in panel order", () => {
-  eq(N.parseFolds("dns, VPN ,bogus,,dns"), ["vpn", "dns"])
-  eq(N.parseFolds("wifi,details"), [])
+test("only the VPN fold is remembered", () => {
+  eq(N.parseFolds("dns, VPN ,bogus,,vpn"), ["vpn"])
+  eq(N.parseFolds("wifi,details,dns"), [])
   eq(N.parseFolds(""), [])
   eq(N.parseFolds(undefined), [])
-})
-
-test("toggling adds and removes one remembered section", () => {
   eq(N.toggleFold([], "vpn"), ["vpn"])
-  eq(N.toggleFold(["vpn", "dns"], "vpn"), ["dns"])
-  eq(N.toggleFold(["dns"], "vpn"), ["vpn", "dns"])
-  eq(N.toggleFold([], "wifi"), [])
-  eq(N.toggleFold([], "band"), [])
-  eq(N.joinFolds(["dns", "vpn"]), "vpn,dns")
+  eq(N.toggleFold(["vpn"], "vpn"), [])
+  eq(N.toggleFold([], "dns"), [])
+  eq(N.joinFolds(["vpn", "dns"]), "vpn")
 })
 
-test("the Wi-Fi list opens folded only while Wi-Fi is connected", () => {
-  eq(N.wifiFoldedOnOpen(true), true)
-  eq(N.wifiFoldedOnOpen(false), false)
+test("DNS always opens folded, Wi-Fi only while connected", () => {
+  eq(N.openFolds(true), ["wifi", "dns"])
+  eq(N.openFolds(false), ["dns"])
+})
+
+test("per-open folds flip for the open, never the remembered one", () => {
+  eq(N.toggleOpenFold(["wifi", "dns"], "dns"), ["wifi"])
+  eq(N.toggleOpenFold(["dns"], "wifi"), ["wifi", "dns"])
+  eq(N.toggleOpenFold([], "vpn"), [])
+  eq(N.toggleOpenFold([], "band"), [])
 })
 
 const FULL = { headerActions: true, band: true, wifi: true, wifiRows: true, folds: [] }
 
 test("unfolded order matches the popup: Wi-Fi under the header", () => {
-  eq(N.stopOrder(FULL), ["header", "wifi", "band", "vpn", "dns"])
+  eq(N.stopOrder(FULL), ["header", "wifi", "band", "dns", "vpn"])
 })
 
 test("folded sections become header stops", () => {
   eq(N.stopOrder(Object.assign({}, FULL, { folds: ["wifi", "vpn", "dns"] })),
-    ["header", "fold:wifi", "band", "fold:vpn", "fold:dns"])
+    ["header", "fold:wifi", "band", "fold:dns", "fold:vpn"])
 })
 
 test("sections off screen are left out", () => {
-  eq(N.stopOrder({ headerActions: false, band: false, wifi: false, folds: ["wifi"] }), ["vpn", "dns"])
-  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false })), ["header", "band", "vpn", "dns"])
-  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false, folds: ["wifi"] })), ["header", "fold:wifi", "band", "vpn", "dns"])
+  eq(N.stopOrder({ headerActions: false, band: false, wifi: false, folds: ["wifi"] }), ["dns", "vpn"])
+  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false })), ["header", "band", "dns", "vpn"])
+  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false, folds: ["wifi"] })), ["header", "fold:wifi", "band", "dns", "vpn"])
 })
 
 test("neighbours step through the order and stop at the ends", () => {
   const order = N.stopOrder(FULL)
   eq(N.neighbourStop(order, "wifi", 1), "band")
-  eq(N.neighbourStop(order, "vpn", -1), "band")
+  eq(N.neighbourStop(order, "vpn", -1), "dns")
+  eq(N.neighbourStop(order, "dns", -1), "band")
   eq(N.neighbourStop(order, "header", -1), "")
-  eq(N.neighbourStop(order, "dns", 1), "")
+  eq(N.neighbourStop(order, "vpn", 1), "")
   eq(N.neighbourStop(order, "missing", 1), "")
 })
 

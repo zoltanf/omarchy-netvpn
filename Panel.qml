@@ -105,10 +105,10 @@ Panel {
   // Sections the user folded away, kept in this widget's shell.json entry as
   // `collapsedSections` so they stay folded across opens and restarts.
   readonly property var savedFolds: NetVpn.parseFolds(settings ? settings.collapsedSections : "")
-  // The Wi-Fi list is folded per open instead: folded while Wi-Fi is
-  // connected, open while it is not (see onOpenedChanged).
-  property bool wifiFolded: false
-  readonly property var folds: wifiFolded ? ["wifi"].concat(savedFolds) : savedFolds
+  // Wi-Fi and DNS are folded per open instead (NetVpn.openFolds): Wi-Fi while
+  // it is connected, DNS always. A click on them lasts until the popup closes.
+  property var openFolds: []
+  readonly property var folds: openFolds.concat(savedFolds)
 
   function isFolded(id) {
     return folds.indexOf(id) !== -1
@@ -119,7 +119,7 @@ Panel {
   // pointing at something that just disappeared.
   function toggleFold(id) {
     var cursorInside = cursorActive && NetVpn.foldOf(focusSection) === id
-    if (id === "wifi") wifiFolded = !wifiFolded
+    if (NetVpn.PERSISTED_FOLDS.indexOf(id) === -1) openFolds = NetVpn.toggleOpenFold(openFolds, id)
     else saveSetting("collapsedSections", NetVpn.joinFolds(NetVpn.toggleFold(savedFolds, id)))
     if (isFolded(id)) {
       if (cursorInside) focusSection = "fold:" + id
@@ -155,7 +155,10 @@ Panel {
   // Losing Wi-Fi while the popup is open unfolds the list, since picking a
   // network is now the likely next move. Connecting never folds it: that
   // would pull the list out from under the click.
-  onConnectedWifiNetworkChanged: if (opened && !connectedWifiNetwork) wifiFolded = false
+  onConnectedWifiNetworkChanged: {
+    if (opened && !connectedWifiNetwork && openFolds.indexOf("wifi") !== -1)
+      openFolds = NetVpn.toggleOpenFold(openFolds, "wifi")
+  }
 
   // One step inside the current stop. False when the step runs off its edge.
   function moveWithin(dy) {
@@ -549,7 +552,7 @@ Panel {
       refresh(true)
       selectedIndex = wifiNetworks.length > 0 ? 0 : -1
       wifiActionFocused = false
-      wifiFolded = NetVpn.wifiFoldedOnOpen(!!connectedWifiNetwork)
+      openFolds = NetVpn.openFolds(!!connectedWifiNetwork)
       focusSection = NetVpn.defaultStop(stopOrder, preferredStops)
       var idx = dnsProviders.indexOf(dnsProvider)
       dnsIndex = idx >= 0 ? idx : 0
@@ -1529,11 +1532,11 @@ Panel {
           InfoLabel { text: "Uploaded" }
           DetailValue { text: root.hasTransferStats ? root.formatBytes(parseFloat(root.info.tx_bytes || "0")) : "--" }
 
-          InfoLabel { text: "IP Address" }
+          InfoLabel { text: "Local IP" }
           DetailValue {
             text: root.info.ip || "--"
             copyable: !!root.info.ip
-            tooltipText: "Copy IP"
+            tooltipText: "Copy local IP"
           }
           InfoLabel { text: "Gateway" }
           DetailValue {
@@ -1775,38 +1778,6 @@ Panel {
 
       }
 
-      // ---------- VPN (netvpn) ----------
-      PanelSeparator {
-        foreground: root.bar.foreground
-      }
-
-      SectionFold {
-        id: vpnFold
-        fold: "vpn"
-        title: "VPN"
-        summary: vpn.barSummary
-      }
-
-      FoldBody {
-        folded: root.isFolded("vpn")
-
-      VpnSection {
-        id: vpnSection
-        width: parent.width
-        vpn: vpn
-        bar: root.bar
-        settings: root.settings
-        cursorActive: root.cursorActive && root.focusSection === "vpn"
-        onCursorClaimed: {
-          root.cursorActive = true
-          root.focusSection = "vpn"
-        }
-        onSaveSetting: function(key, value) { root.saveSetting(key, value) }
-        onRunInTerminal: function(command) { root.runInTerminal(command) }
-        onFocusReturned: keyCatcher.forceActiveFocus()
-      }
-      }
-
       // DNS provider selection.
       PanelSeparator {
         foreground: root.bar.foreground
@@ -1868,6 +1839,38 @@ Panel {
           }
         }
         }
+      }
+
+      // ---------- VPN (netvpn) ----------
+      PanelSeparator {
+        foreground: root.bar.foreground
+      }
+
+      SectionFold {
+        id: vpnFold
+        fold: "vpn"
+        title: "VPN"
+        summary: vpn.barSummary
+      }
+
+      FoldBody {
+        folded: root.isFolded("vpn")
+
+      VpnSection {
+        id: vpnSection
+        width: parent.width
+        vpn: vpn
+        bar: root.bar
+        settings: root.settings
+        cursorActive: root.cursorActive && root.focusSection === "vpn"
+        onCursorClaimed: {
+          root.cursorActive = true
+          root.focusSection = "vpn"
+        }
+        onSaveSetting: function(key, value) { root.saveSetting(key, value) }
+        onRunInTerminal: function(command) { root.runInTerminal(command) }
+        onFocusReturned: keyCatcher.forceActiveFocus()
+      }
       }
     }
     }

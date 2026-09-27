@@ -2,6 +2,9 @@
 
 ## 0.3.0 — 2026-09-27
 
+- DNS moved above VPN and always opens folded. Unfolding it lasts until the
+  popup closes; `collapsedSections` now only keeps `vpn`.
+- "IP Address" in the details grid is now "Local IP".
 - Details grid: **Via** beside the public IP (`Direct`, or the VPN tunnel's
   name), and on Wi-Fi a **Signal** / **Link Rate** row at the top. Both come from
   `omarchy-network-status`, which already reported them but the stock panel

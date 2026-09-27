@@ -133,12 +133,11 @@ function vpnMove(state, dy, stops, counts) {
 
 // Sections the popup can fold, top to bottom. The details grid always shows,
 // and the band row hides itself whenever there is nothing to pick.
-var FOLDABLE = ["wifi", "vpn", "dns"]
+var FOLDABLE = ["wifi", "dns", "vpn"]
 
-// The ones whose fold is remembered. Wi-Fi is not: it opens folded while
-// Wi-Fi is connected and unfolded while it is not, decided on every open,
-// because the network list is what you want exactly when you are offline.
-var PERSISTED_FOLDS = ["vpn", "dns"]
+// The one whose fold is remembered. The others are decided on every open (see
+// openFolds) and a click only lasts until the popup closes.
+var PERSISTED_FOLDS = ["vpn"]
 
 // The `collapsedSections` setting is a comma list, like `hiddenBackends`, so
 // Omarchy's settings dialog can edit it as a plain string. Unknown names,
@@ -161,13 +160,28 @@ function toggleFold(list, id) {
   return parseFolds(current.join(","))
 }
 
-// Whether the Wi-Fi list opens folded: only while Wi-Fi is connected.
-function wifiFoldedOnOpen(wifiConnected) {
-  return wifiConnected === true
+// The per-open folds, as the popup opens. The Wi-Fi list is folded while
+// Wi-Fi is connected and open while it is not, because the list is what you
+// want exactly when you are offline. DNS is always folded: it is set once and
+// rarely touched.
+function openFolds(wifiConnected) {
+  var folds = []
+  if (wifiConnected === true) folds.push("wifi")
+  folds.push("dns")
+  return folds
+}
+
+// Flips one per-open fold.
+function toggleOpenFold(list, id) {
+  var current = (list || []).slice()
+  var at = current.indexOf(id)
+  if (at !== -1) current.splice(at, 1)
+  else if (FOLDABLE.indexOf(id) !== -1 && PERSISTED_FOLDS.indexOf(id) === -1) current.push(id)
+  return FOLDABLE.filter(function(f) { return current.indexOf(f) !== -1 })
 }
 
 // The panel's keyboard stops, top to bottom, in the popup's order: header
-// actions, Wi-Fi networks, band, VPN, DNS. A folded section is one stop, its
+// actions, Wi-Fi networks, band, DNS, VPN. A folded section is one stop, its
 // header ("fold:<id>"), whose Enter unfolds it; an unfolded section is its own
 // content. Sections not on screen are left out.
 //
@@ -182,8 +196,8 @@ function stopOrder(s) {
     else if (s.wifiRows) order.push("wifi")
   }
   if (s.band) order.push("band")
-  order.push(folded("vpn") ? "fold:vpn" : "vpn")
   order.push(folded("dns") ? "fold:dns" : "dns")
+  order.push(folded("vpn") ? "fold:vpn" : "vpn")
   return order
 }
 

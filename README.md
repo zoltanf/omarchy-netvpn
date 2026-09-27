@@ -14,15 +14,16 @@ switcher.
     the VPN tunnel that address comes through. On Wi-Fi there are also
     **Signal** (dBm) and **Link Rate**.
   - Wi-Fi networks, then the Wi-Fi band when there is a choice.
+  - DNS provider.
   - VPN: the tool, its state, and one row per profile or country, each with its
     own on/off switch. Switching one on brings the others down first.
-  - DNS provider.
   - The QR code and speed test buttons from the stock popup are in the header.
-- **Foldable sections:** Wi-Fi networks, VPN and DNS each have a header you
+- **Foldable sections:** Wi-Fi networks, DNS and VPN each have a header you
   can click to fold them away. A folded header keeps a one-line summary, such
-  as the current DNS provider or `Home · 7 networks`. The Wi-Fi list opens
-  folded while you are connected to Wi-Fi and open while you are not. VPN and
-  DNS folds are remembered across opens and restarts.
+  as the current DNS provider or `Home · 7 networks`. DNS always opens folded,
+  and the Wi-Fi list opens folded while you are connected to Wi-Fi; unfolding
+  either lasts until the popup closes. The VPN fold is remembered across opens
+  and restarts.
 
 ## VPN tools
 
@@ -115,7 +116,7 @@ Editable in Omarchy's widget settings dialog or in this widget's entry in
 | `favoriteCountries` | `CH,NL,US` | Pinned at the top for Proton VPN, Mullvad, Windscribe |
 | `hiddenBackends` | `""` | Tools the widget ignores. The gear in the VPN section edits this |
 | `profilesDir` | `~/.config/omarchy/vpn/awg-profiles` | Where AmneziaWG profiles are read from |
-| `collapsedSections` | `""` | Popup sections kept folded: `vpn`, `dns`. Clicking a header or pressing `c` edits this. The Wi-Fi list is not kept: it follows the connection |
+| `collapsedSections` | `""` | Popup sections kept folded: `vpn`. Clicking its header or pressing `c` edits this. Wi-Fi and DNS are decided on every open |
 
 The first five are omarchy-vpn's. `collapsedSections` belongs to this plugin.
 

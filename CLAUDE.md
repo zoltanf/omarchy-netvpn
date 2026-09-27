@@ -86,6 +86,13 @@ screenshots of the author's machine out of it.
   pins the order (`NetVpn.stableOrder`) and the cursor follows by key. Do not
   bind `rows` straight to `backend.targets` again. When testing connects, keep
   the script checking which profile is up after each step.
+- **`wtype` types into whatever has focus.** Twice the popup was not open
+  when keys were sent: a `close` then `open` over IPC in separate commands
+  left it closed, and a pixel check cannot tell the popup from the light
+  terminal behind it. The keys `j k Enter` went into the user's Claude Code
+  prompt and submitted "jk". Only inject keys after confirming the popup is
+  open from a cropped screenshot in the same command, or ask the user to
+  press the keys.
 - Clearing `pending` from a binding on `pending` is a QML binding loop
   (logged as a warning). `settlePending()` runs from the backend's
   `connected`/`currentKey` change signals instead.
