@@ -257,3 +257,27 @@ function followRow(rows, key, index) {
   }
   return Math.max(0, Math.min((rows || []).length - 1, index))
 }
+
+// ------------------------------------------------------- details grid
+
+// "Via" beside the public IP: which way traffic leaves, so the address reads
+// as the VPN's exit or the line's own. The tool's summary names the tunnel
+// (a NetworkManager profile, a Mullvad city); an empty one still says VPN.
+function viaText(connectedSummary, anyConnected) {
+  if (!anyConnected) return "Direct"
+  var summary = String(connectedSummary || "").trim()
+  return summary !== "" ? summary : "VPN"
+}
+
+// omarchy-network-status reports signal as a bare dBm number ("-69").
+function formatSignal(dbm) {
+  var n = parseFloat(String(dbm === undefined || dbm === null ? "" : dbm))
+  return isFinite(n) ? Math.round(n) + " dBm" : "--"
+}
+
+// ...and the Wi-Fi link rate as iw prints it ("432.3 MBit/s").
+function formatLinkRate(raw) {
+  var n = parseFloat(String(raw || ""))
+  if (!isFinite(n) || n <= 0) return "--"
+  return (n >= 1000 ? (n / 1000).toFixed(1) + " Gbit/s" : Math.round(n) + " Mbit/s")
+}

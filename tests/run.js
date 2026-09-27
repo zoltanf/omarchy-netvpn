@@ -255,5 +255,28 @@ test("the cursor follows its row by key", () => {
   eq(N.followRow([], "a", 3), 0)
 })
 
+// ---------------------------------------------------------- details grid
+
+test("via says direct without a tunnel, else names it", () => {
+  eq(N.viaText("", false), "Direct")
+  eq(N.viaText("work-lan", false), "Direct")
+  eq(N.viaText("work-lan", true), "work-lan")
+  eq(N.viaText("  ", true), "VPN")
+})
+
+test("signal is shown in whole dBm", () => {
+  eq(N.formatSignal("-69"), "-69 dBm")
+  eq(N.formatSignal(-52.6), "-53 dBm")
+  eq(N.formatSignal(""), "--")
+  eq(N.formatSignal(undefined), "--")
+})
+
+test("link rate is rounded, Gbit/s past a thousand", () => {
+  eq(N.formatLinkRate("432.3 MBit/s"), "432 Mbit/s")
+  eq(N.formatLinkRate("1201.0 MBit/s"), "1.2 Gbit/s")
+  eq(N.formatLinkRate(""), "--")
+  eq(N.formatLinkRate("0 MBit/s"), "--")
+})
+
 console.log(passed + " passed, " + failed + " failed")
 process.exit(failed === 0 ? 0 : 1)

@@ -2,6 +2,10 @@
 
 ## 0.3.0 — 2026-09-27
 
+- Details grid: **Via** beside the public IP (`Direct`, or the VPN tunnel's
+  name), and on Wi-Fi a **Signal** / **Link Rate** row. Both come from
+  `omarchy-network-status`, which already reported them but the stock panel
+  never showed them.
 - New popup order: details, Wi-Fi networks, Wi-Fi band, VPN, DNS.
 - The public IP moved from the VPN section into the details grid.
 - The details grid is no longer foldable.

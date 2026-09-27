@@ -9,8 +9,10 @@ switcher.
   in its corner while a VPN tunnel is up, and shows faintly while one is
   connecting. The tooltip names both, for example `Wi-Fi: Home · VPN: NetworkManager · work`.
 - **Popup,** top to bottom:
-  - The connection and its details: ping, traffic, local IP, gateway, and the
-    public IP your traffic leaves by (the VPN's exit while one is up).
+  - The connection and its details: ping, traffic, local IP and gateway, the
+    public IP your traffic leaves by, and **Via**, which says `Direct` or names
+    the VPN tunnel that address comes through. On Wi-Fi there are also
+    **Signal** (dBm) and **Link Rate**.
   - Wi-Fi networks, then the Wi-Fi band when there is a choice.
   - VPN: the tool, its state, and one row per profile or country, each with its
     own on/off switch. Switching one on brings the others down first.

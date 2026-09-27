@@ -1537,6 +1537,24 @@ Panel {
             copyable: vpn.publicIp !== "" && !vpn.ipFetching
             tooltipText: "Copy public IP"
           }
+          // Which way that address comes from: the line itself, or a tunnel.
+          InfoLabel { text: "Via" }
+          DetailValue {
+            text: NetVpn.viaText(vpn.connectedBackend ? vpn.connectedBackend.summary : "", vpn.anyConnected)
+          }
+
+          // Wi-Fi only: Ethernet has no signal, and its link speed is already
+          // in the title ("Ethernet (1gbit)").
+          InfoLabel { visible: root.info.type === "wifi"; text: "Signal" }
+          DetailValue {
+            visible: root.info.type === "wifi"
+            text: NetVpn.formatSignal(root.info.signal_dbm)
+          }
+          InfoLabel { visible: root.info.type === "wifi"; text: "Link Rate" }
+          DetailValue {
+            visible: root.info.type === "wifi"
+            text: NetVpn.formatLinkRate(root.info.bitrate)
+          }
         }
       }
 
