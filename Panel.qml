@@ -1491,6 +1491,19 @@ Panel {
           columnSpacing: Style.space(20)
           rowSpacing: Style.spacing.labelGap
 
+          // Wi-Fi only: Ethernet has no signal, and its link speed is already
+          // in the title ("Ethernet (1gbit)").
+          InfoLabel { visible: root.info.type === "wifi"; text: "Signal" }
+          DetailValue {
+            visible: root.info.type === "wifi"
+            text: NetVpn.formatSignal(root.info.signal_dbm)
+          }
+          InfoLabel { visible: root.info.type === "wifi"; text: "Link Rate" }
+          DetailValue {
+            visible: root.info.type === "wifi"
+            text: NetVpn.formatLinkRate(root.info.bitrate)
+          }
+
           // Always mounted: these two used to appear a beat after the panel
           // opened, once the first probe returned, shoving everything below
           // them down. They now hold their place and read "--" until there is
@@ -1541,19 +1554,6 @@ Panel {
           InfoLabel { text: "Via" }
           DetailValue {
             text: NetVpn.viaText(vpn.connectedBackend ? vpn.connectedBackend.summary : "", vpn.anyConnected)
-          }
-
-          // Wi-Fi only: Ethernet has no signal, and its link speed is already
-          // in the title ("Ethernet (1gbit)").
-          InfoLabel { visible: root.info.type === "wifi"; text: "Signal" }
-          DetailValue {
-            visible: root.info.type === "wifi"
-            text: NetVpn.formatSignal(root.info.signal_dbm)
-          }
-          InfoLabel { visible: root.info.type === "wifi"; text: "Link Rate" }
-          DetailValue {
-            visible: root.info.type === "wifi"
-            text: NetVpn.formatLinkRate(root.info.bitrate)
           }
         }
       }
