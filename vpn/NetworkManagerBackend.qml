@@ -285,12 +285,14 @@ Item {
     }
   }
 
-  // `wg` comes with wireguard-tools. The kernel module is what actually carries
-  // the tunnel, but NetworkManager loads that itself, and a box with the tools
-  // installed is a box where a WireGuard profile is meant to work.
+  // NetworkManager brings WireGuard up itself, through the kernel module, and
+  // never calls `wg` — so wireguard-tools is not what makes a profile work, and
+  // requiring it hid every WireGuard profile on a stock Omarchy install, with no
+  // error. (netvpn change from upstream, which probes `wg` alone.) The module is
+  // what matters: loaded, or at least available to load.
   Process {
     id: wireguardProbe
-    command: ["omarchy-cmd-present", "wg"]
+    command: ["sh", "-c", "command -v wg >/dev/null 2>&1 || [ -d /sys/module/wireguard ] || modinfo wireguard >/dev/null 2>&1"]
     running: true
     onExited: function(exitCode) {
       root._wireguardPresent = exitCode === 0

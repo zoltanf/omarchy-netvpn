@@ -6,10 +6,21 @@ import Quickshell.Io
 import Quickshell.Networking
 import qs.Ui
 import qs.Commons
-import "Model.js" as Model
+import "NetworkModel.js" as Model
+import "NetVpn.js" as NetVpn
+import "vpn"
 
+// Network + VPN: Omarchy's network widget with omarchy-vpn folded into it.
+// This file is Omarchy's shell/plugins/panels/network/Panel.qml; the netvpn
+// additions are the VPN controller, the VpnSection block in the popup, the
+// badge on the bar icon, and the "vpn" stop in the keyboard walk. Everything
+// else is kept as upstream wrote it so Omarchy's fixes can be merged across.
 Panel {
   id: root
+  // The bar overwrites moduleName with this plugin's own id when it loads the
+  // widget. The ids here are Omarchy's, kept as upstream: with clonedFrom in
+  // manifest.json the shell routes calls for omarchy.network (the SUPER+CTRL+W
+  // keybind included) to this plugin.
   moduleName: "omarchy.network"
   ipcTarget: "omarchy.network"
   // manageIpc: false so this panel can own the single IpcHandler the target
@@ -20,6 +31,93 @@ Panel {
   function close() {
     root.controller.hide()
     cancelPasswordPrompt()
+  }
+
+  // ---------------------------------------------------------------- VPN
+
+  // Owned here rather than by the popup, so the bar badge keeps up with the
+  // tunnel while the popup is closed. It polls on its own interval.
+  VpnController {
+    id: vpn
+    settings: root.settings
+  }
+
+  readonly property string vpnBadge: NetVpn.badgeState(vpn.anyConnected, !!(vpn.active && vpn.active.busy))
+
+  function refreshVpn() {
+    vpn.refreshAll(true)
+    vpn.refreshPublicIp()
+  }
+
+  // Widget settings live in this widget's shell.json entry, the same place the
+  // Omarchy settings dialog writes them, so the two agree on the next reload.
+  function saveSetting(key, value) {
+    var next = {}
+    for (var name in settings) {
+      if (name !== "id") next[name] = settings[name]
+    }
+    next[key] = value
+    root.settings = next
+    if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function") {
+      bar.shell.updateEntryInline(root.moduleName, next)
+    }
+  }
+
+  // The fixes that need a person at a keyboard — VPN credentials, a terms
+  // prompt, a sudo password — get a terminal, and the popup steps aside.
+  function runInTerminal(command) {
+    if (!root.bar || !command) return
+    root.bar.run("omarchy-launch-floating-terminal-with-presentation " + Util.shellQuote(command))
+    root.close()
+  }
+
+  // Keeps whatever the cursor is on inside the popup's scroll area. The popup
+  // scrolls as a whole now that the VPN block makes it taller than a laptop
+  // screen can always fit.
+  function scrollPanelTo(item) {
+    if (!panelFlick || !item) return
+    Qt.callLater(function() {
+      if (!item || !item.visible) return
+      var margin = Style.space(6)
+      var point = item.mapToItem(panelFlick.contentItem, 0, 0)
+      var top = point.y
+      var bottom = top + item.height
+      var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
+      if (top < panelFlick.contentY + margin) panelFlick.contentY = Math.max(0, top - margin)
+      else if (bottom > panelFlick.contentY + panelFlick.height - margin) panelFlick.contentY = Math.min(maxY, bottom + margin - panelFlick.height)
+    })
+  }
+
+  function scrollToCursor() {
+    if (!cursorActive) return
+    if (focusSection === "header") scrollPanelTo(heroItem)
+    else if (focusSection === "vpn") scrollPanelTo(vpnSection.cursorItem())
+    else if (focusSection === "band") scrollPanelTo(bandSection)
+    else if (focusSection === "dns") scrollPanelTo(dnsSection)
+    else if (focusSection === "wifi") scrollPanelTo(networkList)
+  }
+
+  // Hands the cursor to the VPN block, entering it from above (dy > 0) or
+  // below (dy < 0).
+  function enterVpn(dy) {
+    focusSection = "vpn"
+    vpnSection.enter(dy)
+  }
+
+  // Leaving the VPN block: up to the network header actions, down to the band
+  // row or the DNS row — whichever is on screen.
+  function leaveVpn(dy) {
+    if (dy < 0) {
+      if (headerActionCount > 0) {
+        focusSection = "header"
+        headerIndex = 0
+      }
+    } else if (canSelectBand) {
+      focusSection = "band"
+      bandAutoFocused = true
+    } else {
+      focusSection = "dns"
+    }
   }
 
   function cancelPasswordPrompt() {
@@ -119,9 +217,10 @@ Panel {
   property bool cursorActive: false
 
   // Keyboard focus zone for the panel. j/k crosses row boundaries:
-  // header actions ⇄ band ⇄ DNS row ⇄ Wi-Fi networks. h/l move
-  // within header actions, band pills, or DNS providers.
-  property string focusSection: "dns"  // "header" | "band" | "dns" | "wifi"
+  // header actions ⇄ VPN ⇄ band ⇄ DNS row ⇄ Wi-Fi networks. h/l move
+  // within header actions, band pills, or DNS providers. The VPN block keeps
+  // its own cursor inside (see VpnSection.qml).
+  property string focusSection: "dns"  // "header" | "vpn" | "band" | "dns" | "wifi"
   property int headerIndex: 0
   readonly property bool canDisconnect: !!connectedWifiNetwork
   readonly property bool headerHasDisconnect: false
@@ -220,6 +319,58 @@ Panel {
     // network target; both cards are their own plugins now.
     function showQr() { root.summonWifiQr(true) }
     function speedTest() { root.summonSpeedTest() }
+
+    // VPN, as omarchy-vpn's IPC surface with a vpn prefix: one target per
+    // widget, and this one is omarchy.network.
+    function vpnRefresh(): string { root.refreshVpn(); return "ok" }
+    function vpnStatus(): string { return vpn.barSummary }
+    function vpnIp(): string { return vpn.publicIp !== "" ? vpn.publicIp : "unknown" }
+    function vpnBackends(): string {
+      return vpn.availableBackends.map(function(b) { return b.backendId }).join(" ")
+    }
+    function vpnUse(backendId: string): string {
+      vpnSection.selectBackend(backendId)
+      return vpn.active ? vpn.active.backendId : "none"
+    }
+    function vpnConnect(target: string): string {
+      if (!vpn.active) return "no backend"
+      var wanted = String(target || "")
+      // A bare country code is the documented shorthand, as upstream.
+      var byCode = "country:" + wanted.toUpperCase()
+      var targets = vpn.active.targets
+      for (var i = 0; i < targets.length; i++) {
+        var candidate = targets[i]
+        if (candidate.key === wanted || candidate.key === byCode
+            || candidate.detail === wanted || candidate.label === wanted) {
+          vpn.connectVia(vpn.active, candidate)
+          return "ok"
+        }
+      }
+      return "unknown target"
+    }
+    function vpnDisconnect(): string {
+      if (!vpn.active) return "no backend"
+      vpn.disconnectActive()
+      return "ok"
+    }
+    function vpnToggle(): string {
+      if (!vpn.active) return "no backend"
+      vpn.toggleActive()
+      return "ok"
+    }
+    function vpnQuickconnect(): string {
+      if (!vpn.active) return "no backend"
+      if (vpn.active.connected) return "already connected"
+      vpn.toggleActive()
+      return "ok"
+    }
+    function vpnSetup(): string {
+      if (vpn.setupCommand === "") return "none"
+      if (!root.bar) return "no bar"
+      var command = vpn.setupCommand
+      root.runInTerminal(command)
+      return command
+    }
   }
 
   function activateHeader() {
@@ -327,6 +478,12 @@ Panel {
       dnsIndex = idx >= 0 ? idx : 0
       syncBandIndex()
       cursorActive = false
+      // Opening re-probes for VPN tools installed since the shell started;
+      // the background poll deliberately does not.
+      vpnSection.reset()
+      vpn.refreshAll(true)
+      if (vpn.publicIp === "") vpn.refreshPublicIp()
+      if (panelFlick) panelFlick.contentY = 0
     } else {
       // Drop a restart armed by this open: without it a close/reopen inside
       // the 100ms window reuses the running timer and re-enables the scanner
@@ -958,8 +1115,61 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: root.icon
+    tooltipText: NetVpn.barTooltip(root.kind, root.connectedWifiNetwork ? root.connectedWifiNetwork.name : "", vpn.barSummary)
 
+    // The network glyph as upstream draws it, plus a shield in the bottom
+    // right corner while a tunnel is up (faint while one is coming up). The
+    // halo behind the shield is cut out of the glyph in the bar's own colour;
+    // on a transparent bar there is no colour to cut with, so it is skipped.
+    iconComponent: Component {
+      Item {
+        OpticalGlyph {
+          anchors.fill: parent
+          text: root.icon
+          fontFamily: button.fontFamily
+          fontSize: button.fontSize
+          color: button.foreground
+        }
+
+        Rectangle {
+          id: badge
+          visible: root.vpnBadge !== "off"
+          readonly property real size: Math.round(button.fontSize * 0.62)
+          width: size
+          height: size
+          radius: size / 2
+          color: root.bar && !root.bar.transparent ? root.bar.background : "transparent"
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          anchors.rightMargin: -Math.round(size * 0.2)
+          anchors.bottomMargin: -Math.round(size * 0.1)
+
+          Text {
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: NetVpn.GLYPH_BADGE
+            color: button.foreground
+            opacity: root.vpnBadge === "on" ? 1.0 : 0.45
+            font.family: button.fontFamily
+            font.pixelSize: Math.round(badge.size * 0.9)
+            renderType: Text.NativeRendering
+          }
+        }
+      }
+    }
+
+    // Right click is the VPN's quick switch and middle click refreshes both
+    // halves, as on omarchy-vpn's own icon.
     onPressed: function(b) {
+      if (b === Qt.RightButton) {
+        vpn.toggleActive()
+        return
+      }
+      if (b === Qt.MiddleButton) {
+        root.refresh()
+        root.refreshVpn()
+        return
+      }
       if (root.opened) root.close()
       // open() is enough: onOpenedChanged runs refresh(true), which defers the
       // PHY scan past the first frame. The bare refresh() that used to follow
@@ -992,8 +1202,9 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       // Freeze the cursor model while the inline password prompt is open;
-      // the TextField inside owns input until Esc/Enter/Cancel.
-      blocked: root.passwordSsid !== ""
+      // the TextField inside owns input until Esc/Enter/Cancel. The VPN
+      // filter field owns input the same way while it has focus.
+      blocked: root.passwordSsid !== "" || vpnSection.filterFocused
 
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) {
@@ -1001,26 +1212,22 @@ Panel {
           if (dy >= 0) return
         }
         if (dy !== 0) {
-          // Vertical order is header ⇄ band ⇄ DNS ⇄ wifi, with the band section
-          // dropping out of the chain entirely when it isn't on screen.
+          // Vertical order is header ⇄ VPN ⇄ band ⇄ DNS ⇄ wifi, with the band
+          // section dropping out of the chain entirely when it isn't on screen.
+          // The VPN block is always there (its gear at least) and walks its own
+          // rows, handing the cursor back when a step runs off either end.
           if (root.focusSection === "header") {
-            if (dy > 0) {
-              if (root.canSelectBand) {
-                root.focusSection = "band"
-                root.bandAutoFocused = true
-              } else {
-                root.focusSection = "dns"
-              }
-            }
+            if (dy > 0) root.enterVpn(dy)
+          } else if (root.focusSection === "vpn") {
+            if (!vpnSection.move(0, dy)) root.leaveVpn(dy)
           } else if (root.focusSection === "band") {
             // Automatic on the header line, then the pills -- which collapse
             // away under Automatic, leaving a single row to walk.
             if (dy < 0) {
               if (!root.bandAutoFocused) {
                 root.bandAutoFocused = true
-              } else if (root.headerActionCount > 0) {
-                root.focusSection = "header"
-                root.headerIndex = 0
+              } else {
+                root.enterVpn(dy)
               }
             } else if (root.bandAutoFocused && root.bandPillsVisible) {
               root.bandAutoFocused = false
@@ -1029,15 +1236,14 @@ Panel {
             }
           } else if (root.focusSection === "dns") {
             // k from DNS moves up into the band section when it's on screen,
-            // then the disconnect button; otherwise stays put. j drops into the
-            // wifi list if there's anywhere to land.
+            // otherwise into the VPN block. j drops into the wifi list if
+            // there's anywhere to land.
             if (dy < 0) {
               if (root.canSelectBand) {
                 root.focusSection = "band"
                 root.bandAutoFocused = !root.bandPillsVisible
-              } else if (root.headerActionCount > 0) {
-                root.focusSection = "header"
-                root.headerIndex = 0
+              } else {
+                root.enterVpn(dy)
               }
             } else if (root.wifiNetworks.length > 0) {
               root.focusSection = "wifi"
@@ -1055,14 +1261,19 @@ Panel {
         }
         if (dx !== 0) {
           if (root.focusSection === "header") root.selectHeaderByDelta(dx)
+          else if (root.focusSection === "vpn") vpnSection.move(dx, 0)
           else if (root.focusSection === "band") { if (!root.bandAutoFocused) root.selectBandByDelta(dx) }
           else if (root.focusSection === "dns") root.selectDnsByDelta(dx)
           else if (root.focusSection === "wifi") root.selectWifiActionByDelta(dx)
         }
+        // Keyboard moves only: following a hover would scroll a new item
+        // under the mouse, which would then claim the cursor in turn.
+        root.scrollToCursor()
       }
       onActivateRequested: {
         if (root.cursorActive) {
           if (root.focusSection === "header") root.activateHeader()
+          else if (root.focusSection === "vpn") vpnSection.activate()
           else if (root.focusSection === "band") root.activateBand()
           else if (root.focusSection === "dns") root.activateDns()
           else root.activateSelected()
@@ -1071,19 +1282,32 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
-        if (t === "r" || t === "R") root.refresh()
+        if (t === "r" || t === "R") { root.refresh(); root.refreshVpn() }
         else if (t === "w" || t === "W") root.toggleNetwork()
+        else vpnSection.textKey(t)
       }
+
+    // The whole body scrolls: with the VPN block added it no longer fits a
+    // laptop screen in every state. Lists inside keep their own caps.
+    Flickable {
+      id: panelFlick
+      anchors.fill: parent
+      contentWidth: width
+      contentHeight: column.implicitHeight
+      clip: true
+      boundsBehavior: Flickable.StopAtBounds
+      flickableDirection: Flickable.VerticalFlick
+      interactive: contentHeight > height
+      ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
     Column {
       id: column
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: parent.top
+      width: panelFlick.width
       spacing: Style.space(12)
 
       // ---------- Hero: network icon · SSID + state · actions ----------
       Item {
+        id: heroItem
         width: parent.width
         implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, heroActions.implicitHeight)
 
@@ -1267,6 +1491,27 @@ Panel {
         }
       }
 
+      // ---------- VPN (netvpn) ----------
+      PanelSeparator {
+        foreground: root.bar.foreground
+      }
+
+      VpnSection {
+        id: vpnSection
+        width: parent.width
+        vpn: vpn
+        bar: root.bar
+        settings: root.settings
+        cursorActive: root.cursorActive && root.focusSection === "vpn"
+        onCursorClaimed: {
+          root.cursorActive = true
+          root.focusSection = "vpn"
+        }
+        onSaveSetting: function(key, value) { root.saveSetting(key, value) }
+        onRunInTerminal: function(command) { root.runInTerminal(command) }
+        onFocusReturned: keyCatcher.forceActiveFocus()
+      }
+
       // Wi-Fi band selection. Only on Wi-Fi, and only when the network answers
       // on more than one band -- a single-band AP has nothing to toggle.
       PanelSeparator {
@@ -1275,6 +1520,7 @@ Panel {
       }
 
       Column {
+        id: bandSection
         visible: root.canSelectBand
         width: parent.width
         spacing: Style.space(10)
@@ -1404,6 +1650,7 @@ Panel {
       }
 
       Column {
+        id: dnsSection
         width: parent.width
         spacing: Style.space(10)
 
@@ -1522,6 +1769,7 @@ Panel {
           }
         }
       }
+    }
     }
     }
   }

@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "id": "zoltanf.netvpn",
+  "name": "Network + VPN",
+  "version": "0.1.0",
+  "author": "Zoltan Fekete",
+  "license": "MIT",
+  "description": "Omarchy's Wi-Fi/Ethernet widget with VPN status and switching folded in: one bar icon, one popup.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Network + VPN",
+    "description": "Wi-Fi list, Ethernet and connection state from Omarchy's network widget, plus VPN switching from omarchy-vpn (Proton VPN, Mullvad, Windscribe, Cloudflare WARP, AmneziaWG, and NetworkManager OpenVPN/WireGuard/OpenConnect/VPNC profiles). A shield on the network icon shows when a tunnel is up.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 15,
+      "preferredBackend": "Auto",
+      "favoriteCountries": "CH,NL,US",
+      "hiddenBackends": "",
+      "profilesDir": "~/.config/omarchy/vpn/awg-profiles"
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 5,
+        "max": 600,
+        "step": 5,
+        "defaultValue": 15
+      },
+      {
+        "key": "preferredBackend",
+        "type": "enum",
+        "label": "VPN tool shown first",
+        "options": [
+          "Auto",
+          "Proton VPN",
+          "Mullvad",
+          "Windscribe",
+          "Cloudflare WARP",
+          "NetworkManager",
+          "AmneziaWG"
+        ],
+        "defaultValue": "Auto",
+        "description": "Auto picks whichever detected tool is connected, otherwise the first one found."
+      },
+      {
+        "key": "favoriteCountries",
+        "type": "string",
+        "label": "Favorite countries (comma separated)",
+        "defaultValue": "CH,NL,US",
+        "description": "Two-letter codes for Proton VPN and Mullvad. Windscribe names its regions instead, so it matches full names (\"Switzerland\") and leading words (\"US\" picks up US East, US Central and US West)."
+      },
+      {
+        "key": "profilesDir",
+        "type": "string",
+        "label": "AmneziaWG profile directory",
+        "defaultValue": "~/.config/omarchy/vpn/awg-profiles",
+        "description": "Where the AmneziaWG chip looks for *.conf profiles. Created with owner-only access if it does not exist."
+      },
+      {
+        "key": "hiddenBackends",
+        "type": "string",
+        "label": "Hidden VPN tools (comma separated)",
+        "defaultValue": "",
+        "description": "Tools the widget ignores entirely: proton, mullvad, windscribe, warp, networkmanager, amneziawg. Also editable from the gear inside the panel."
+      }
+    ]
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.network"
+  }
+}
