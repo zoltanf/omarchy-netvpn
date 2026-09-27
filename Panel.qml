@@ -95,29 +95,95 @@ Panel {
     else if (focusSection === "band") scrollPanelTo(bandSection)
     else if (focusSection === "dns") scrollPanelTo(dnsSection)
     else if (focusSection === "wifi") scrollPanelTo(networkList)
+    else if (focusSection === "fold:details") scrollPanelTo(detailsFold)
+    else if (focusSection === "fold:vpn") scrollPanelTo(vpnFold)
+    else if (focusSection === "fold:dns") scrollPanelTo(dnsFold)
+    else if (focusSection === "fold:wifi") scrollPanelTo(wifiFold)
   }
 
-  // Hands the cursor to the VPN block, entering it from above (dy > 0) or
-  // below (dy < 0).
-  function enterVpn(dy) {
-    focusSection = "vpn"
-    vpnSection.enter(dy)
+  // ------------------------------------------------------------ folding
+
+  // Sections the user folded away, kept in this widget's shell.json entry as
+  // `collapsedSections` so they stay folded across opens and restarts.
+  readonly property var folds: NetVpn.parseFolds(settings ? settings.collapsedSections : "")
+
+  function isFolded(id) {
+    return folds.indexOf(id) !== -1
   }
 
-  // Leaving the VPN block: up to the network header actions, down to the band
-  // row or the DNS row — whichever is on screen.
-  function leaveVpn(dy) {
-    if (dy < 0) {
-      if (headerActionCount > 0) {
-        focusSection = "header"
-        headerIndex = 0
-      }
-    } else if (canSelectBand) {
-      focusSection = "band"
-      bandAutoFocused = true
-    } else {
-      focusSection = "dns"
+  // Folding the section the cursor is in parks the cursor on its header, and
+  // unfolding from the header walks it into the content, so it is never left
+  // pointing at something that just disappeared.
+  function toggleFold(id) {
+    var cursorInside = cursorActive && NetVpn.foldOf(focusSection) === id
+    saveSetting("collapsedSections", NetVpn.joinFolds(NetVpn.toggleFold(folds, id)))
+    if (isFolded(id)) {
+      if (cursorInside) focusSection = "fold:" + id
+    } else if (focusSection === "fold:" + id) {
+      if (stopOrder.indexOf(id) !== -1) enterStop(id, 1)
+      else normalizeFocus()
     }
+    scrollToCursor()
+  }
+
+  // The keyboard stops on screen, top to bottom (see NetVpn.stopOrder).
+  readonly property var stopOrder: NetVpn.stopOrder({
+    headerActions: headerActionCount > 0,
+    details: !!info.iface,
+    band: canSelectBand,
+    wifi: wifiStationAvailable,
+    wifiRows: wifiNetworks.length > 0,
+    folds: folds
+  })
+
+  readonly property var preferredStops: ["wifi", "fold:wifi", "dns", "fold:dns"]
+
+  // A section can vanish under the cursor (Wi-Fi off, band row gone, a fold);
+  // the cursor then moves to where an open would have put it.
+  function normalizeFocus() {
+    if (stopOrder.indexOf(focusSection) === -1)
+      focusSection = NetVpn.defaultStop(stopOrder, preferredStops)
+  }
+
+  onStopOrderChanged: normalizeFocus()
+
+  // One step inside the current stop. False when the step runs off its edge.
+  function moveWithin(dy) {
+    if (focusSection === "vpn") return vpnSection.move(0, dy)
+    if (focusSection === "band") {
+      // Automatic on the header line, then the pills -- which collapse away
+      // under Automatic, leaving a single row to walk.
+      if (dy < 0 && !bandAutoFocused) { bandAutoFocused = true; return true }
+      if (dy > 0 && bandAutoFocused && bandPillsVisible) { bandAutoFocused = false; return true }
+      return false
+    }
+    if (focusSection === "wifi") {
+      if (dy < 0 && selectedIndex <= 0) { wifiActionFocused = false; return false }
+      if (dy > 0 && selectedIndex >= wifiNetworks.length - 1) return false
+      selectByDelta(dy)
+      return true
+    }
+    return false
+  }
+
+  // Lands the cursor on `stop`, entering it from above (dy > 0) or below.
+  function enterStop(stop, dy) {
+    focusSection = stop
+    if (stop === "header") headerIndex = 0
+    else if (stop === "vpn") vpnSection.enter(dy)
+    else if (stop === "band") bandAutoFocused = dy > 0 ? true : !bandPillsVisible
+    else if (stop === "wifi") {
+      selectedIndex = dy > 0 ? 0 : wifiNetworks.length - 1
+      wifiActionFocused = false
+    }
+  }
+
+  // j/k: within the current stop first, then on to the neighbouring one.
+  function moveVertical(dy) {
+    normalizeFocus()
+    if (moveWithin(dy)) return
+    var next = NetVpn.neighbourStop(stopOrder, focusSection, dy)
+    if (next !== "") enterStop(next, dy)
   }
 
   function cancelPasswordPrompt() {
@@ -220,7 +286,7 @@ Panel {
   // header actions ⇄ VPN ⇄ band ⇄ DNS row ⇄ Wi-Fi networks. h/l move
   // within header actions, band pills, or DNS providers. The VPN block keeps
   // its own cursor inside (see VpnSection.qml).
-  property string focusSection: "dns"  // "header" | "vpn" | "band" | "dns" | "wifi"
+  property string focusSection: "dns"  // "header" | "vpn" | "band" | "dns" | "wifi" | "fold:<section>"
   property int headerIndex: 0
   readonly property bool canDisconnect: !!connectedWifiNetwork
   readonly property bool headerHasDisconnect: false
@@ -473,7 +539,7 @@ Panel {
       refresh(true)
       selectedIndex = wifiNetworks.length > 0 ? 0 : -1
       wifiActionFocused = false
-      focusSection = wifiNetworks.length > 0 ? "wifi" : "dns"
+      focusSection = NetVpn.defaultStop(stopOrder, preferredStops)
       var idx = dnsProviders.indexOf(dnsProvider)
       dnsIndex = idx >= 0 ? idx : 0
       syncBandIndex()
@@ -1211,54 +1277,9 @@ Panel {
           root.cursorActive = true
           if (dy >= 0) return
         }
-        if (dy !== 0) {
-          // Vertical order is header ⇄ VPN ⇄ band ⇄ DNS ⇄ wifi, with the band
-          // section dropping out of the chain entirely when it isn't on screen.
-          // The VPN block is always there (its gear at least) and walks its own
-          // rows, handing the cursor back when a step runs off either end.
-          if (root.focusSection === "header") {
-            if (dy > 0) root.enterVpn(dy)
-          } else if (root.focusSection === "vpn") {
-            if (!vpnSection.move(0, dy)) root.leaveVpn(dy)
-          } else if (root.focusSection === "band") {
-            // Automatic on the header line, then the pills -- which collapse
-            // away under Automatic, leaving a single row to walk.
-            if (dy < 0) {
-              if (!root.bandAutoFocused) {
-                root.bandAutoFocused = true
-              } else {
-                root.enterVpn(dy)
-              }
-            } else if (root.bandAutoFocused && root.bandPillsVisible) {
-              root.bandAutoFocused = false
-            } else {
-              root.focusSection = "dns"
-            }
-          } else if (root.focusSection === "dns") {
-            // k from DNS moves up into the band section when it's on screen,
-            // otherwise into the VPN block. j drops into the wifi list if
-            // there's anywhere to land.
-            if (dy < 0) {
-              if (root.canSelectBand) {
-                root.focusSection = "band"
-                root.bandAutoFocused = !root.bandPillsVisible
-              } else {
-                root.enterVpn(dy)
-              }
-            } else if (root.wifiNetworks.length > 0) {
-              root.focusSection = "wifi"
-              if (root.selectedIndex < 0) root.selectedIndex = 0
-            }
-          } else {  // wifi
-            // k from the top row escapes back up to the DNS row rather than
-            // wrapping around to the bottom of the list.
-            if (dy < 0 && root.selectedIndex <= 0) {
-              root.focusSection = "dns"
-              root.wifiActionFocused = false
-            }
-            else root.selectByDelta(dy)
-          }
-        }
+        // Vertical order is header ⇄ VPN ⇄ band ⇄ DNS ⇄ wifi, folded sections
+        // standing in as their headers and off-screen ones dropping out.
+        if (dy !== 0) root.moveVertical(dy)
         if (dx !== 0) {
           if (root.focusSection === "header") root.selectHeaderByDelta(dx)
           else if (root.focusSection === "vpn") vpnSection.move(dx, 0)
@@ -1272,7 +1293,9 @@ Panel {
       }
       onActivateRequested: {
         if (root.cursorActive) {
-          if (root.focusSection === "header") root.activateHeader()
+          var fold = root.focusSection.indexOf("fold:") === 0 ? NetVpn.foldOf(root.focusSection) : ""
+          if (fold !== "") root.toggleFold(fold)
+          else if (root.focusSection === "header") root.activateHeader()
           else if (root.focusSection === "vpn") vpnSection.activate()
           else if (root.focusSection === "band") root.activateBand()
           else if (root.focusSection === "dns") root.activateDns()
@@ -1284,6 +1307,11 @@ Panel {
       onTextKey: function(t) {
         if (t === "r" || t === "R") { root.refresh(); root.refreshVpn() }
         else if (t === "w" || t === "W") root.toggleNetwork()
+        // Folds (or unfolds) the section the cursor is in.
+        else if (t === "c" || t === "C") {
+          var fold = root.cursorActive ? NetVpn.foldOf(root.focusSection) : ""
+          if (fold !== "") root.toggleFold(fold)
+        }
         else vpnSection.textKey(t)
       }
 
@@ -1440,9 +1468,17 @@ Panel {
       }
 
       // Connection details: transfer metrics first, then IP/Gateway.
-      Column {
+      SectionFold {
+        id: detailsFold
+        fold: "details"
         visible: !!root.info.iface
-        width: parent.width
+        title: "DETAILS"
+        summary: root.info.ip ? root.formatPingLatency(root.internetPingLatency) + " · " + root.info.ip : ""
+      }
+
+      FoldBody {
+        folded: root.isFolded("details")
+        shown: !!root.info.iface
         spacing: Style.spacing.labelGap
 
         GridLayout {
@@ -1496,6 +1532,16 @@ Panel {
         foreground: root.bar.foreground
       }
 
+      SectionFold {
+        id: vpnFold
+        fold: "vpn"
+        title: "VPN"
+        summary: vpn.barSummary
+      }
+
+      FoldBody {
+        folded: root.isFolded("vpn")
+
       VpnSection {
         id: vpnSection
         width: parent.width
@@ -1510,6 +1556,7 @@ Panel {
         onSaveSetting: function(key, value) { root.saveSetting(key, value) }
         onRunInTerminal: function(command) { root.runInTerminal(command) }
         onFocusReturned: keyCatcher.forceActiveFocus()
+      }
       }
 
       // Wi-Fi band selection. Only on Wi-Fi, and only when the network answers
@@ -1654,11 +1701,15 @@ Panel {
         width: parent.width
         spacing: Style.space(10)
 
-        PanelSectionHeader {
-          text: "DNS PROVIDER"
-          foreground: root.bar.foreground
-          fontFamily: root.bar.fontFamily
+        SectionFold {
+          id: dnsFold
+          fold: "dns"
+          title: "DNS PROVIDER"
+          summary: root.dnsProvider
         }
+
+        FoldBody {
+          folded: root.isFolded("dns")
 
         Row {
           id: dnsRow
@@ -1700,6 +1751,7 @@ Panel {
             onClicked: root.setDns(provider)
           }
         }
+        }
       }
 
 
@@ -1708,6 +1760,23 @@ Panel {
         visible: root.wifiStationAvailable
         foreground: root.bar.foreground
       }
+
+      SectionFold {
+        id: wifiFold
+        fold: "wifi"
+        visible: root.wifiStationAvailable
+        title: "WI-FI NETWORKS"
+        summary: {
+          var n = root.wifiNetworks.length
+          var here = root.connectedWifiNetwork ? root.connectedWifiNetwork.name + " · " : ""
+          return here + n + (n === 1 ? " network" : " networks")
+        }
+      }
+
+      FoldBody {
+        folded: root.isFolded("wifi")
+        shown: root.wifiStationAvailable
+        spacing: Style.space(8)
 
       PanelSectionHeader {
         visible: root.wifiStationAvailable && root.scanning
@@ -1769,8 +1838,27 @@ Panel {
           }
         }
       }
+      }
     }
     }
+    }
+  }
+
+  // Header of a foldable section, bound to the panel's fold state and cursor.
+  // It is a keyboard stop only while folded (see NetVpn.stopOrder), so hover
+  // only claims the cursor then; unfolded, it is a plain click target.
+  component SectionFold: FoldHeader {
+    required property string fold
+    folded: root.isFolded(fold)
+    hasCursor: root.cursorActive && root.focusSection === "fold:" + fold
+    foreground: root.bar.foreground
+    fill: root.hoverFill
+    fontFamily: root.bar.fontFamily
+    onToggled: root.toggleFold(fold)
+    onHovered: function(isHovered) {
+      if (!isHovered || !folded) return
+      root.cursorActive = true
+      root.focusSection = "fold:" + fold
     }
   }
 

@@ -417,7 +417,7 @@ Column {
         textFormat: Text.PlainText
         width: parent.width
         text: section.providersOpen ? "VPN tools"
-          : (section.backend ? "VPN · " + section.backend.label : "VPN")
+          : (section.backend ? section.backend.label : "No VPN tool")
         color: section.foreground
         font.family: section.fontFamily
         font.pixelSize: Style.font.title

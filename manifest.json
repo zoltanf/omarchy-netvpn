@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "zoltanf.netvpn",
   "name": "Network + VPN",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Zoltan Fekete",
   "license": "MIT",
   "description": "Omarchy's Wi-Fi/Ethernet widget with VPN status and switching folded in: one bar icon, one popup.",
@@ -23,7 +23,8 @@
       "preferredBackend": "Auto",
       "favoriteCountries": "CH,NL,US",
       "hiddenBackends": "",
-      "profilesDir": "~/.config/omarchy/vpn/awg-profiles"
+      "profilesDir": "~/.config/omarchy/vpn/awg-profiles",
+      "collapsedSections": ""
     },
     "schema": [
       {
@@ -71,6 +72,13 @@
         "label": "Hidden VPN tools (comma separated)",
         "defaultValue": "",
         "description": "Tools the widget ignores entirely: proton, mullvad, windscribe, warp, networkmanager, amneziawg. Also editable from the gear inside the panel."
+      },
+      {
+        "key": "collapsedSections",
+        "type": "string",
+        "label": "Folded popup sections (comma separated)",
+        "defaultValue": "",
+        "description": "Popup sections shown folded: details, vpn, dns, wifi. Also changed by clicking a section header, or with c in the popup."
       }
     ]
   },

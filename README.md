@@ -13,6 +13,10 @@ switcher.
   VPN section sits between the stats and the band/DNS rows: a connect switch,
   your public IP, the tool's details while connected, and the list of
   profiles or countries to connect to.
+- **Foldable sections:** Details, VPN, DNS and Wi-Fi networks each have a
+  header you can click to fold them away. A folded header keeps a one-line
+  summary, such as the current DNS provider or `Home · 7 networks`. Folds are
+  remembered across opens and restarts.
 
 ## VPN tools
 
@@ -59,7 +63,8 @@ omarchy plugin disable zoltanf.netvpn
 VPN, and middle click refreshes both halves.
 
 **Keyboard** (in the popup): `j`/`k` or the arrow keys move between rows and
-sections, `h`/`l` move within a row, and Enter activates. Also:
+sections, `h`/`l` move within a row, and Enter activates. A folded section is a
+single stop, its header, and Enter unfolds it. Also:
 
 | Key | Action |
 |-----|--------|
@@ -69,6 +74,7 @@ sections, `h`/`l` move within a row, and Enter activates. Also:
 | `d` | VPN disconnect |
 | `s` | Next VPN tool |
 | `/` | Filter the VPN list (tools that support it) |
+| `c` | Fold or unfold the section the cursor is in |
 | Tab | Next bar panel |
 | Esc | Close |
 
@@ -92,8 +98,8 @@ omarchy-shell omarchy.network vpnSetup
 
 ## Settings
 
-These are omarchy-vpn's settings, editable in Omarchy's widget settings dialog
-or in this widget's entry in `~/.config/omarchy/shell.json`:
+Editable in Omarchy's widget settings dialog or in this widget's entry in
+`~/.config/omarchy/shell.json`:
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -102,15 +108,19 @@ or in this widget's entry in `~/.config/omarchy/shell.json`:
 | `favoriteCountries` | `CH,NL,US` | Pinned at the top for Proton VPN, Mullvad, Windscribe |
 | `hiddenBackends` | `""` | Tools the widget ignores. The gear in the VPN section edits this |
 | `profilesDir` | `~/.config/omarchy/vpn/awg-profiles` | Where AmneziaWG profiles are read from |
+| `collapsedSections` | `""` | Folded popup sections: any of `details`, `vpn`, `dns`, `wifi`. Clicking a header or pressing `c` edits this |
+
+The first five are omarchy-vpn's. `collapsedSections` belongs to this plugin.
 
 ## How it is put together
 
 | Path | From | Notes |
 |------|------|-------|
-| `Panel.qml` | Omarchy 4.0.4 `shell/plugins/panels/network/Panel.qml` | Adds the VPN controller, the VPN section, the badge, the `vpn` keyboard stop, the VPN IPC methods, and a scrollable popup body |
+| `Panel.qml` | Omarchy 4.0.4 `shell/plugins/panels/network/Panel.qml` | Adds the VPN controller, the VPN section, the badge, section folding, the VPN IPC methods, and a scrollable popup body. The vertical keyboard walk is now table-driven (`NetVpn.stopOrder`) |
 | `NetworkModel.js` | Omarchy 4.0.4 `.../network/Model.js` | Unchanged |
 | `VpnSection.qml` | omarchy-vpn 1.5.0 `Panel.qml` | The popup body rebuilt as a section, with its own cursor |
-| `NetVpn.js` | new | Badge, tooltip and the VPN section's keyboard walk. Pure JS |
+| `NetVpn.js` | new | Badge, tooltip, folds and the keyboard walk across sections. Pure JS |
+| `FoldHeader.qml`, `FoldBody.qml` | new | Section header with chevron and summary, and the animated fold |
 | `vpn/` | omarchy-vpn 1.5.0 (`e0f2d97`) | Unchanged except for the WireGuard probe in `NetworkManagerBackend.qml` |
 
 The first commit in this repository is both upstreams verbatim, so

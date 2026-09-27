@@ -19,8 +19,13 @@ screenshots of the author's machine out of it.
   IPC, the badge shows while connected, the tooltip works, and the
   `shell toggle omarchy.network` keybind route alternates open/closed.
   Disabling the plugin restores `omarchy.network` in the same slot.
-- Tests: `node tests/run.js` (NetVpn.js, 15) and `node vpn/tests/run.js`
+- Tests: `node tests/run.js` (NetVpn.js, 23) and `node vpn/tests/run.js`
   (vendored, 147).
+- v0.2.0 (same day) added foldable sections. Verified live: folding and
+  unfolding by keyboard, summaries, the cursor parking on a folded header,
+  persistence across a shell restart, and a settings write not closing the
+  popup. Mouse clicks on headers were not exercised (no pointer injection
+  tool; `wtype` is keyboard-only).
 
 ## How it hangs together
 
@@ -34,6 +39,11 @@ screenshots of the author's machine out of it.
 - The bar overwrites `moduleName` with the entry id at load, so
   `saveSetting` → `updateEntryInline(moduleName)` writes this plugin's own
   `shell.json` entry even though the QML says `"omarchy.network"`.
+- Vertical keyboard movement: `moveVertical` tries `moveWithin` (VPN rows,
+  band auto/pills, Wi-Fi rows), then steps to the neighbour in `stopOrder`
+  (`NetVpn.stopOrder`). To add a section, add it there and to `enterStop` /
+  `moveWithin`; do not reintroduce per-section if-chains.
+  `onStopOrderChanged` → `normalizeFocus()` moves a stranded cursor.
 - The `VpnController` lives on the Panel (not in the popup) so the badge
   updates with the popup closed.
 - Upstream sources are in the first commit verbatim. Keep changes to

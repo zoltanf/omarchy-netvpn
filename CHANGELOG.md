@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-09-27
+
+- Foldable popup sections: Details, VPN, DNS provider and Wi-Fi networks each
+  get a header with a chevron. Folded, the header shows a one-line summary.
+  Click a header or press `c` to fold or unfold. A folded section is a single
+  keyboard stop, and Enter unfolds it.
+- Folds persist in the new `collapsedSections` setting.
+- The vertical keyboard walk is now one ordered list of stops
+  (`NetVpn.stopOrder`) instead of per-section rules. It skips sections that
+  are off screen or folded.
+- The VPN block's title is now the tool's name; the section header says "VPN".
+
 ## 0.1.0 — 2026-09-27
 
 First release.

@@ -131,3 +131,81 @@ function vpnMove(state, dy, stops, counts) {
   if (enteredKey !== "") next[enteredKey] = step > 0 ? 0 : Math.max(0, countFor(next.stop, counts) - 1)
   return { state: next, leave: 0 }
 }
+
+// ------------------------------------------------------------- folding
+
+// Sections the popup can fold, top to bottom. The band row is not one of
+// them: it already hides itself whenever there is nothing to pick.
+var FOLDABLE = ["details", "vpn", "dns", "wifi"]
+
+// The `collapsedSections` setting is a comma list, like `hiddenBackends`, so
+// Omarchy's settings dialog can edit it as a plain string. Unknown names and
+// repeats are dropped, and the result is in panel order whatever order it was
+// written in.
+function parseFolds(raw) {
+  var wanted = String(raw || "").split(",").map(function(part) { return part.trim().toLowerCase() })
+  return FOLDABLE.filter(function(id) { return wanted.indexOf(id) !== -1 })
+}
+
+function joinFolds(list) {
+  return parseFolds((list || []).join(",")).join(",")
+}
+
+function toggleFold(list, id) {
+  var current = parseFolds((list || []).join(","))
+  var at = current.indexOf(id)
+  if (at !== -1) current.splice(at, 1)
+  else if (FOLDABLE.indexOf(id) !== -1) current.push(id)
+  return parseFolds(current.join(","))
+}
+
+// The panel's keyboard stops, top to bottom. A folded section is one stop,
+// its header ("fold:<id>"), whose Enter unfolds it; an unfolded section is
+// its own content. The details grid has nothing to select, so it is a stop
+// only while folded. Sections not on screen are left out.
+//
+//   s = { headerActions, details, band, wifi, wifiRows, folds }
+function stopOrder(s) {
+  var folds = s && s.folds ? s.folds : []
+  var folded = function(id) { return folds.indexOf(id) !== -1 }
+  var order = []
+  if (s.headerActions) order.push("header")
+  if (s.details && folded("details")) order.push("fold:details")
+  order.push(folded("vpn") ? "fold:vpn" : "vpn")
+  if (s.band) order.push("band")
+  order.push(folded("dns") ? "fold:dns" : "dns")
+  if (s.wifi) {
+    if (folded("wifi")) order.push("fold:wifi")
+    else if (s.wifiRows) order.push("wifi")
+  }
+  return order
+}
+
+// The stop a step off the edge of `current` lands on, or "" at either end.
+function neighbourStop(order, current, dy) {
+  var at = order.indexOf(current)
+  if (at === -1 || dy === 0) return ""
+  var next = at + (dy > 0 ? 1 : -1)
+  return next >= 0 && next < order.length ? order[next] : ""
+}
+
+// Where the cursor starts: the first preference that is on screen, else the
+// last stop. Also where a cursor stranded by a section vanishing goes.
+function defaultStop(order, preferred) {
+  var list = preferred || []
+  for (var i = 0; i < list.length; i++) {
+    if (order.indexOf(list[i]) !== -1) return list[i]
+  }
+  return order.length > 0 ? order[order.length - 1] : ""
+}
+
+// The foldable section a stop belongs to, or "" for one that does not fold.
+function foldOf(stop) {
+  var id = String(stop || "")
+  if (id.indexOf("fold:") === 0) id = id.substring(5)
+  return FOLDABLE.indexOf(id) !== -1 ? id : ""
+}
+
+// Chevron right while folded, down while open, the usual disclosure pair.
+var GLYPH_FOLDED = String.fromCodePoint(0xF0142)
+var GLYPH_UNFOLDED = String.fromCodePoint(0xF0140)

@@ -145,5 +145,62 @@ test("no vertical step is a no-op", () => {
   eq(N.vpnMove(state, 0, ALL, COUNTS), { state, leave: 0 })
 })
 
+
+// -------------------------------------------------------------- folding
+
+test("folds parse to known sections, in panel order", () => {
+  eq(N.parseFolds("wifi, DNS ,bogus,,wifi"), ["dns", "wifi"])
+  eq(N.parseFolds(""), [])
+  eq(N.parseFolds(undefined), [])
+})
+
+test("toggling adds and removes one section", () => {
+  eq(N.toggleFold([], "vpn"), ["vpn"])
+  eq(N.toggleFold(["vpn", "dns"], "vpn"), ["dns"])
+  eq(N.toggleFold(["wifi"], "details"), ["details", "wifi"])
+  eq(N.toggleFold([], "band"), [])
+  eq(N.joinFolds(["wifi", "vpn"]), "vpn,wifi")
+})
+
+const FULL = { headerActions: true, details: true, band: true, wifi: true, wifiRows: true, folds: [] }
+
+test("unfolded order matches the panel, details has no stop", () => {
+  eq(N.stopOrder(FULL), ["header", "vpn", "band", "dns", "wifi"])
+})
+
+test("folded sections become header stops", () => {
+  eq(N.stopOrder(Object.assign({}, FULL, { folds: ["details", "vpn", "dns", "wifi"] })),
+    ["header", "fold:details", "fold:vpn", "band", "fold:dns", "fold:wifi"])
+})
+
+test("sections off screen are left out", () => {
+  eq(N.stopOrder({ headerActions: false, details: false, band: false, wifi: false, folds: ["details", "wifi"] }),
+    ["vpn", "dns"])
+  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false })), ["header", "vpn", "band", "dns"])
+  eq(N.stopOrder(Object.assign({}, FULL, { wifiRows: false, folds: ["wifi"] })), ["header", "vpn", "band", "dns", "fold:wifi"])
+})
+
+test("neighbours step through the order and stop at the ends", () => {
+  const order = N.stopOrder(FULL)
+  eq(N.neighbourStop(order, "vpn", 1), "band")
+  eq(N.neighbourStop(order, "vpn", -1), "header")
+  eq(N.neighbourStop(order, "header", -1), "")
+  eq(N.neighbourStop(order, "wifi", 1), "")
+  eq(N.neighbourStop(order, "missing", 1), "")
+})
+
+test("default stop is the first preference on screen", () => {
+  eq(N.defaultStop(["header", "vpn", "dns", "wifi"], ["wifi", "dns"]), "wifi")
+  eq(N.defaultStop(["header", "vpn", "fold:dns", "fold:wifi"], ["wifi", "dns"]), "fold:wifi")
+  eq(N.defaultStop([], ["wifi"]), "")
+})
+
+test("foldOf names the section of a stop", () => {
+  eq(N.foldOf("fold:vpn"), "vpn")
+  eq(N.foldOf("wifi"), "wifi")
+  eq(N.foldOf("band"), "")
+  eq(N.foldOf("header"), "")
+})
+
 console.log(passed + " passed, " + failed + " failed")
 process.exit(failed === 0 ? 0 : 1)
