@@ -65,6 +65,12 @@ back in the same slot:
 omarchy plugin disable zoltanf.netvpn
 ```
 
+To uninstall it completely:
+
+```sh
+omarchy plugin remove zoltanf.netvpn
+```
+
 ## Using it
 
 **Mouse:** left click opens the popup, right click connects or disconnects the
