@@ -53,6 +53,12 @@ screenshots of the author's machine out of it.
   `onStopOrderChanged` → `normalizeFocus()` moves a stranded cursor.
 - The `VpnController` lives on the Panel (not in the popup) so the badge
   updates with the popup closed.
+- The controller's id is `ownVpn`; everything else uses the `vpn` property
+  (the polling copy's controller). `VpnController.active` is upstream's
+  selected backend, hence the name `polling` for the switch.
+- `saveSetting` applies a change at once (also to the other monitors' copies)
+  and writes shell.json 0.8 s later via `flushSettings()`: the write copies
+  and reloads the whole shell config on the UI thread and made folds lag.
 - Upstream sources are in the first commit verbatim. Keep changes to
   `Panel.qml` and `vpn/` minimal and commented, so upstream releases can be
   merged by diffing against that commit.
@@ -103,7 +109,13 @@ screenshots of the author's machine out of it.
   with the SSID, local/gateway/public IPs and VPN profile names painted over
   with fake values (Lighthouse, 192.168.1.x, 203.0.113.24, office/travel) in
   JetBrainsMono via PIL. Redo it the same way; never commit a raw screenshot.
-- Not tested on a multi-monitor setup. Each bar instance runs its own
-  `VpnController`, as upstream does.
+- Multi-monitor (2026-11-06, eDP-1 + DP-1): each bar copy still builds a
+  `VpnController`, but only the first copy in `bar.moduleWidgets(moduleName)`
+  polls (`polling`, a netvpn addition to the vendored controller); the others
+  bind `vpn` to it, so every bar's shield and popup agree at once. Verified by
+  temporary log lines: one controller polls and fetches the public IP, and
+  DP-1's copy uses the eDP-1 copy's controller. Not exercised: the polling
+  copy being destroyed (its monitor unplugged); `leaderVpn` is a QtObject
+  property, so it nulls and falls back to the copy's own controller meanwhile.
 - Upstream omarchy-vpn is actively released (1.5.0 at import). Watch for
   fixes worth merging, especially in `vpn/model/`.

@@ -130,7 +130,13 @@ Item {
 
   // A shell restart inherits whatever tunnel was already up, so no change ever
   // fires. One request at startup gives the bar tooltip something to say.
-  Component.onCompleted: ipSettle.restart()
+  // netvpn: every monitor's bar has its own controller, but only one of them
+  // (`polling`, chosen in Panel.qml) polls and fetches the public IP; the
+  // others stay idle and the bars show the polling one's state.
+  property bool polling: true
+  onPollingChanged: if (polling) ipSettle.restart()
+
+  Component.onCompleted: if (polling) ipSettle.restart()
 
   function refreshPublicIp() {
     if (ipProcess.running) return
@@ -145,7 +151,7 @@ Item {
     id: ipSettle
     interval: 2000
     repeat: false
-    onTriggered: root.refreshPublicIp()
+    onTriggered: if (root.polling) root.refreshPublicIp()  // netvpn: guard added
   }
 
   // Over HTTPS, and not by accident: a bare hostname would leave curl on plain
@@ -389,7 +395,7 @@ Item {
   Timer {
     interval: root.refreshIntervalSec * 1000
     repeat: true
-    running: true
+    running: root.polling  // netvpn: was `true`
     triggeredOnStart: true
     onTriggered: root.refreshAll()
   }

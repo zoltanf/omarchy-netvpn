@@ -138,7 +138,7 @@ The first five are omarchy-vpn's. `collapsedSections` belongs to this plugin.
 | `VpnSection.qml` | omarchy-vpn 1.5.0 `Panel.qml` | The popup body rebuilt as a section, with its own cursor and a switch per row instead of one master switch |
 | `NetVpn.js` | new | Badge, tooltip, folds, the keyboard walk across sections, and stable VPN row order. Pure JS |
 | `FoldHeader.qml`, `FoldBody.qml` | new | Section header with chevron and summary, and the animated fold |
-| `vpn/` | omarchy-vpn 1.5.0 (`e0f2d97`) | Unchanged except for the WireGuard probe in `NetworkManagerBackend.qml` |
+| `vpn/` | omarchy-vpn 1.5.0 (`e0f2d97`) | Unchanged except for the WireGuard probe in `NetworkManagerBackend.qml` and a `polling` switch in `VpnController.qml` (one controller polls across monitors) |
 
 The first commit in this repository is both upstreams verbatim, so
 `git diff <first-commit> -- Panel.qml` shows everything changed in the network

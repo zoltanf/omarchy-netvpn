@@ -37,10 +37,32 @@ Panel {
 
   // Owned here rather than by the popup, so the bar badge keeps up with the
   // tunnel while the popup is closed. It polls on its own interval.
+  //
+  // Each monitor's bar builds its own copy of this widget, and only the first
+  // copy's controller polls: the others use it, so every bar's shield and
+  // popup change together when a tunnel goes up or down, wherever it was
+  // switched. bar.moduleWidgets() reads the bar's host list, so this re-runs
+  // when a copy comes or goes (a monitor plugged or unplugged).
   VpnController {
-    id: vpn
+    id: ownVpn
     settings: root.settings
+    polling: root.vpnLeader
   }
+
+  readonly property QtObject ownVpnController: ownVpn
+  readonly property var vpnLeaderWidget: {
+    var items = bar && typeof bar.moduleWidgets === "function" ? bar.moduleWidgets(moduleName) : []
+    for (var i = 0; i < items.length; i++) {
+      if (items[i] && items[i].ownVpnController) return items[i]
+    }
+    return root
+  }
+  readonly property bool vpnLeader: vpnLeaderWidget === root
+  // A QtObject property drops to null when its object is destroyed, so a copy
+  // whose leader is torn down falls back to its own controller until the
+  // binding above names the next leader.
+  readonly property QtObject leaderVpn: vpnLeaderWidget ? vpnLeaderWidget.ownVpnController : null
+  readonly property QtObject vpn: leaderVpn ? leaderVpn : ownVpn
 
   readonly property string vpnBadge: NetVpn.badgeState(vpn.anyConnected, !!(vpn.active && vpn.active.busy))
 
@@ -51,6 +73,13 @@ Panel {
 
   // Widget settings live in this widget's shell.json entry, the same place the
   // Omarchy settings dialog writes them, so the two agree on the next reload.
+  //
+  // A change shows at once, on this copy and on the copies on other monitors
+  // (which share one VPN controller), and is written 0.8 s later, merged with
+  // any changes made meanwhile: the write copies and reloads the whole shell
+  // config on the UI thread, which made a fold or a gear toggle lag.
+  property var _pendingSettings: null
+
   function saveSetting(key, value) {
     var next = {}
     for (var name in settings) {
@@ -58,9 +87,28 @@ Panel {
     }
     next[key] = value
     root.settings = next
+    var copies = bar && typeof bar.moduleWidgets === "function" ? bar.moduleWidgets(moduleName) : []
+    for (var i = 0; i < copies.length; i++) {
+      if (copies[i] && copies[i] !== root && copies[i].ownVpnController) copies[i].settings = next
+    }
+    root._pendingSettings = next
+    settingsSave.restart()
+  }
+
+  function flushSettings() {
+    var next = root._pendingSettings
+    if (!next) return
+    root._pendingSettings = null
+    settingsSave.stop()
     if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function") {
       bar.shell.updateEntryInline(root.moduleName, next)
     }
+  }
+
+  Timer {
+    id: settingsSave
+    interval: 800
+    onTriggered: root.flushSettings()
   }
 
   // The fixes that need a person at a keyboard — VPN credentials, a terms
@@ -543,6 +591,8 @@ Panel {
 
   Component.onDestruction: {
     if (scannerDevice) scannerDevice.scannerEnabled = false
+    // A copy reloaded or removed within the 0.8 s still saves its change.
+    flushSettings()
   }
 
   // KeyboardPanel primes layer-shell focus whenever the panel opens. That's
@@ -1861,7 +1911,7 @@ Panel {
       VpnSection {
         id: vpnSection
         width: parent.width
-        vpn: vpn
+        vpn: root.vpn
         bar: root.bar
         settings: root.settings
         cursorActive: root.cursorActive && root.focusSection === "vpn"
