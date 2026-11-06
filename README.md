@@ -5,6 +5,8 @@ One bar icon and one popup for both your connection and your VPN. This
 widget with [omarchy-vpn](https://github.com/jkoestinger/omarchy-vpn)'s VPN
 switcher.
 
+![The Network + VPN popup](preview.png)
+
 - **Bar icon:** Omarchy's usual Wi-Fi or Ethernet glyph. A small shield appears
   in its corner while a VPN tunnel is up, and shows faintly while one is
   connecting. The tooltip names both, for example `Wi-Fi: Home · VPN: NetworkManager · work`.

@@ -99,8 +99,10 @@ screenshots of the author's machine out of it.
 
 ## Open items
 
-- No preview image in the README. A screenshot would need sanitizing (SSIDs,
-  IPs, profile names).
+- `preview.png` (2026-11-06, marketplace card + README) is a real screenshot
+  with the SSID, local/gateway/public IPs and VPN profile names painted over
+  with fake values (Lighthouse, 192.168.1.x, 203.0.113.24, office/travel) in
+  JetBrainsMono via PIL. Redo it the same way; never commit a raw screenshot.
 - Not tested on a multi-monitor setup. Each bar instance runs its own
   `VpnController`, as upstream does.
 - Upstream omarchy-vpn is actively released (1.5.0 at import). Watch for
