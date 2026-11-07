@@ -63,6 +63,17 @@ screenshots of the author's machine out of it.
   `Panel.qml` and `vpn/` minimal and commented, so upstream releases can be
   merged by diffing against that commit.
 
+- 0.3.1 (2026-11-07): the marketplace security review (#14194) flagged the
+  stock enterprise sign-in: it created PEAP/MSCHAPv2 profiles with no CA or
+  server domain (upstream omacom/omarchy#13922, fix PR #13947 open). Removed
+  `enterpriseConnectScript`, `connectEnterprise` and the identity field;
+  `askCredentials` opens `omarchy-launch-tui --app-id=TUI.float nmtui edit`
+  for a new enterprise network (nmtui has CA cert and Domain fields). No
+  passphrase reprompt for enterprise rows. Verified: the popup renders, the
+  nmtui command opens floating (875×600). Not exercised: clicking a real
+  enterprise row (none in range). If #13947 is merged upstream, merging it
+  could bring in-popup sign-in back.
+
 ## Dead ends / gotchas
 
 - **qmllint is useless here.** It cannot resolve Quickshell's `qs.*` modules

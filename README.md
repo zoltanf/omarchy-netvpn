@@ -15,7 +15,12 @@ switcher.
     public IP your traffic leaves by, and **Via**, which says `Direct` or names
     the VPN tunnel that address comes through. On Wi-Fi there are also
     **Signal** (dBm) and **Link Rate**.
-  - Wi-Fi networks, then the Wi-Fi band when there is a choice.
+  - Wi-Fi networks, then the Wi-Fi band when there is a choice. Picking a new
+    enterprise (802.1X) network opens `nmtui` in a floating terminal, where you
+    set it up with its CA certificate and server domain; saved enterprise
+    networks connect from the popup as usual. The stock popup signs in from
+    the popup but trusts any server
+    ([omacom/omarchy#13922](https://github.com/omacom/omarchy/issues/13922)).
   - DNS provider.
   - VPN: the tool, its state, and one row per profile or country, each with its
     own on/off switch. Switching one on brings the others down first. With a

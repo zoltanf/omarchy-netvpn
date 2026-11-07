@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-11-07
+
+- New enterprise (802.1X) Wi-Fi networks are set up in `nmtui` (opened in a
+  floating terminal) instead of the popup's identity and password fields. The
+  popup created a PEAP/MSCHAPv2 profile with no CA certificate or server
+  domain, so a fake access point could collect the login (inherited from the
+  stock panel, omacom/omarchy#13922). Saved enterprise networks still connect
+  from the popup.
+
 ## 0.3.0 — 2026-09-27
 
 - With one VPN tool in use, its name moves into the section title

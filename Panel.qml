@@ -250,7 +250,6 @@ Panel {
   function cancelPasswordPrompt() {
     passwordSsid = ""
     passwordText = ""
-    identityText = ""
   }
 
   // Live connection details from `ip` / /sys / iw.
@@ -321,7 +320,6 @@ Panel {
   property string failureReason: ""
   property string passwordSsid: ""
   property string passwordText: ""
-  property string identityText: ""
 
   // ConnectionFailReason values as a plain object, so Model.js helpers stay
   // pure JS and Node-testable.
@@ -715,7 +713,7 @@ Panel {
     // connectedWifiNetwork when handed null, so a row left stale by scan churn
     // would otherwise tear down whatever is connected now instead.
     if (net.connected) { disconnectRow(net.ssid); return }
-    if (requiresCredentials(net.security) && !net.known) { openPasswordPrompt(net.ssid); return }
+    if (requiresCredentials(net.security) && !net.known) { askCredentials(net); return }
     connectDirectly(net.ssid)
   }
 
@@ -972,11 +970,22 @@ Panel {
   }
 
   function openPasswordPrompt(ssid) {
-    if (passwordSsid !== ssid) {
-      passwordText = ""
-      identityText = ""
-    }
+    if (passwordSsid !== ssid) passwordText = ""
     passwordSsid = ssid
+  }
+
+  // netvpn: a new enterprise (802.1X) network is set up in nmtui, where the
+  // CA certificate and the server's domain can be set. Upstream's panel made
+  // a PEAP profile that trusted any server (omacom/omarchy#13922). Saved
+  // enterprise profiles still connect from the panel.
+  function isEnterpriseSecurity(security) {
+    return security === WifiSecurityType.Wpa2Eap || security === WifiSecurityType.WpaEap
+  }
+
+  function askCredentials(net) {
+    if (!isEnterpriseSecurity(net.security)) return openPasswordPrompt(net.ssid)
+    if (root.bar) root.bar.run("omarchy-launch-tui --app-id=TUI.float nmtui edit")
+    root.close()
   }
 
   function networkForSsid(ssid) {
@@ -1049,26 +1058,6 @@ Panel {
 
   function connectWithPassphrase(ssid, passphrase) {
     runNetworkAction("connect", networkForSsid(ssid), function(network) { network.connectWithPsk(passphrase) })
-  }
-
-  function connectEnterprise(ssid, identity, passphrase) {
-    runNetworkAction("connect", networkForSsid(ssid), function(network) {
-      enterpriseConnect.secret = passphrase
-      enterpriseConnect.command = ["bash", "-c", Model.enterpriseConnectScript, "nmcli-eap", ssid, identity]
-      enterpriseConnect.running = true
-    })
-  }
-
-  // Creates and activates the 802.1X profile (see Model.enterpriseConnectScript).
-  // The password goes over stdin, never argv.
-  Process {
-    id: enterpriseConnect
-    property string secret: ""
-    stdinEnabled: true
-    onStarted: {
-      write(secret + "\n")
-      secret = ""
-    }
   }
 
   function disconnect(network) {
@@ -2022,9 +2011,7 @@ Panel {
     readonly property bool isConnected: net && net.connected
     readonly property bool isKnown: !!(net && net.known)
     readonly property bool requiresCredentials: net ? root.requiresCredentials(net.security) : false
-    readonly property bool isEnterprise: net
-      ? (net.security === WifiSecurityType.Wpa2Eap || net.security === WifiSecurityType.WpaEap)
-      : false
+    readonly property bool isEnterprise: net ? root.isEnterpriseSecurity(net.security) : false
     readonly property bool canForget: root.canForgetNetwork(net)
     readonly property bool isSelected: root.focusSection === "wifi" && root.selectedIndex === index
     readonly property bool forgetFocused: isSelected && root.wifiActionFocused && canForget
@@ -2042,9 +2029,8 @@ Panel {
     readonly property bool isPasswordOpen: root.passwordSsid !== "" && root.passwordSsid === (net ? net.ssid : "")
 
     function submitCredentials() {
-      if (!net || root.busy || root.passwordText.length === 0) return
-      if (!isEnterprise) return root.connectWithPassphrase(net.ssid, root.passwordText)
-      if (root.identityText.length > 0) root.connectEnterprise(net.ssid, root.identityText, root.passwordText)
+      if (!net || root.busy || root.passwordText.length === 0 || isEnterprise) return
+      root.connectWithPassphrase(net.ssid, root.passwordText)
     }
 
     Connections {
@@ -2055,7 +2041,7 @@ Panel {
         // failNetworkAction, which clears the action state.
         var ours = root.actionKind === "connect" && root.actionSsid === (row.net.ssid || "")
         root.failNetworkAction(root.networkForSsid(row.net.ssid), reason)
-        if (ours && root.shouldRepromptPassphrase(reason, row.requiresCredentials)) root.openPasswordPrompt(row.net.ssid)
+        if (ours && !row.isEnterprise && root.shouldRepromptPassphrase(reason, row.requiresCredentials)) root.openPasswordPrompt(row.net.ssid)
       }
       function onConnectedChanged() {
         if (row.net) root.checkActionCompletion(root.networkForSsid(row.net.ssid))
@@ -2117,7 +2103,7 @@ Panel {
           return
         }
         if (row.requiresCredentials && !row.isKnown) {
-          root.openPasswordPrompt(row.net.ssid)
+          root.askCredentials(row.net)
           return
         }
         root.connectDirectly(row.net.ssid)
@@ -2256,32 +2242,8 @@ Panel {
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10)
       anchors.topMargin: Style.space(4)
-      implicitHeight: (idField.visible ? idField.implicitHeight + Style.space(4) : 0) + pwField.implicitHeight + Style.spacing.rowGap
+      implicitHeight: pwField.implicitHeight + Style.spacing.rowGap
       height: implicitHeight
-
-      TextField {
-        id: idField
-        visible: row.isEnterprise && !row.isBusy && !row.isFailed
-        anchors.left: parent.left
-        anchors.right: connectPwBtn.left
-        anchors.top: parent.top
-        anchors.rightMargin: Style.space(6)
-        placeholderText: "Identity (user@domain)"
-        font.family: Style.font.family
-        font.pixelSize: Style.font.body
-        foreground: root.bar.foreground
-        horizontalPadding: Style.spacing.controlGap
-        verticalPadding: Style.spacing.controlPaddingY
-        enabled: !row.isBusy
-        text: row.isPasswordOpen ? root.identityText : ""
-
-        onAccepted: pwField.forceActiveFocus()
-        onTextChanged: if (row.isPasswordOpen && text !== root.identityText) root.identityText = text
-        Keys.onEscapePressed: root.cancelPasswordPrompt()
-
-        onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
-        Component.onCompleted: if (visible) Qt.callLater(forceActiveFocus)
-      }
 
       TextField {
         id: pwField
@@ -2305,8 +2267,8 @@ Panel {
         onTextChanged: if (row.isPasswordOpen && text !== root.passwordText) root.passwordText = text
         Keys.onEscapePressed: root.cancelPasswordPrompt()
 
-        onVisibleChanged: if (visible && !row.isEnterprise) Qt.callLater(forceActiveFocus)
-        Component.onCompleted: if (visible && !row.isEnterprise) Qt.callLater(forceActiveFocus)
+        onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+        Component.onCompleted: if (visible) Qt.callLater(forceActiveFocus)
       }
 
       BorderSurface {
@@ -2340,7 +2302,7 @@ Panel {
         visible: !row.isBusy && !row.isFailed
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        enabled: row.net && pwField.text.length > 0 && (!row.isEnterprise || idField.text.length > 0)
+        enabled: row.net && pwField.text.length > 0
         iconText: "󰄬"
         tooltipText: "Connect"
         foreground: root.bar.foreground
