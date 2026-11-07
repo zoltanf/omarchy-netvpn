@@ -714,7 +714,7 @@ Panel {
     // would otherwise tear down whatever is connected now instead.
     if (net.connected) { disconnectRow(net.ssid); return }
     if (requiresCredentials(net.security) && !net.known) { askCredentials(net); return }
-    connectDirectly(net.ssid)
+    connectKnown(net)
   }
 
   // Bar pill state, derived from the native NetworkManager service so the
@@ -976,16 +976,44 @@ Panel {
 
   // netvpn: a new enterprise (802.1X) network is set up in nmtui, where the
   // CA certificate and the server's domain can be set. Upstream's panel made
-  // a PEAP profile that trusted any server (omacom/omarchy#13922). Saved
-  // enterprise profiles still connect from the panel.
+  // a PEAP profile that trusted any server (omacom/omarchy#13922). A saved
+  // enterprise profile connects from the panel only if it pins the server
+  // (connectKnown); otherwise nmtui opens on that profile.
   function isEnterpriseSecurity(security) {
     return security === WifiSecurityType.Wpa2Eap || security === WifiSecurityType.WpaEap
   }
 
   function askCredentials(net) {
     if (!isEnterpriseSecurity(net.security)) return openPasswordPrompt(net.ssid)
-    if (root.bar) root.bar.run("omarchy-launch-tui --app-id=TUI.float nmtui edit")
+    openEnterpriseEditor({ action: "edit", uuid: "" })
+  }
+
+  function openEnterpriseEditor(plan) {
+    if (root.bar) root.bar.run(NetVpn.enterpriseEditCommand(plan))
     root.close()
+  }
+
+  // netvpn: a saved row connects at once, except an enterprise one, whose
+  // profile is checked first (bin/netvpn-eap-check, read-only nmcli).
+  readonly property string eapCheckPath: Qt.resolvedUrl("bin/netvpn-eap-check").toString().replace(/^file:\/\//, "")
+  property string eapCheckSsid: ""
+
+  function connectKnown(net) {
+    if (!isEnterpriseSecurity(net.security)) return connectDirectly(net.ssid)
+    if (eapCheckProc.running) return
+    eapCheckSsid = net.ssid
+    // The SSID is an argument, never part of a shell string.
+    eapCheckProc.command = ["/usr/bin/bash", eapCheckPath, net.ssid]
+    eapCheckProc.running = true
+  }
+
+  function finishEnterpriseCheck(text) {
+    var ssid = eapCheckSsid
+    eapCheckSsid = ""
+    if (!ssid) return
+    var plan = NetVpn.enterpriseConnectPlan(text)
+    if (plan.action === "connect") connectDirectly(ssid)
+    else openEnterpriseEditor(plan)
   }
 
   function networkForSsid(ssid) {
@@ -1109,6 +1137,14 @@ Panel {
     interval: 1500
     repeat: false
     onTriggered: root.syncWifiNetworks()
+  }
+
+  Process {
+    id: eapCheckProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.finishEnterpriseCheck(text)
+    }
   }
 
   Process {
@@ -2106,7 +2142,7 @@ Panel {
           root.askCredentials(row.net)
           return
         }
-        root.connectDirectly(row.net.ssid)
+        root.connectKnown(row.net)
       }
     }
 

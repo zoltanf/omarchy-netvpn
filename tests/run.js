@@ -296,5 +296,40 @@ test("folded summary drops the tool name when the title has it", () => {
   eq(N.vpnFoldSummary("Not connected", true, "", false), "Not connected")
 })
 
+const U1 = "11111111-2222-3333-4444-555555555555"
+const U2 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+const row = (uuid, ca, caPath, sys, dsm, dm, alt) => [uuid, ca, caPath, sys, dsm, dm, alt].join("\t")
+
+test("enterprise profile with CA and server name connects", () => {
+  eq(N.enterpriseConnectPlan(row(U1, "/etc/ca.pem", "", "no", "example.org", "", "") + "\n"), { action: "connect", uuid: "" })
+  eq(N.enterpriseConnectPlan(row(U1, "", "", "yes", "", "radius.example.org", "")), { action: "connect", uuid: "" })
+  eq(N.enterpriseConnectPlan(row(U1, "", "/etc/ssl/certs", "", "", "", "DNS:radius.example.org")), { action: "connect", uuid: "" })
+})
+
+test("enterprise profile missing CA or server name opens nmtui on it", () => {
+  eq(N.enterpriseConnectPlan(row(U1, "", "", "no", "", "", "")), { action: "edit", uuid: U1 })
+  eq(N.enterpriseConnectPlan(row(U1, "/etc/ca.pem", "", "no", "", "", "")), { action: "edit", uuid: U1 })
+  eq(N.enterpriseConnectPlan(row(U1, "", "", "no", "example.org", "", "")), { action: "edit", uuid: U1 })
+  eq(N.enterpriseConnectPlan(row(U1, "--", "--", "no", "--", "--", "--")), { action: "edit", uuid: U1 })
+})
+
+test("one untrusted profile among several is enough to open nmtui", () => {
+  const raw = row(U1, "/etc/ca.pem", "", "no", "example.org", "", "") + "\n" + row(U2, "", "", "no", "", "", "")
+  eq(N.enterpriseConnectPlan(raw), { action: "edit", uuid: U2 })
+})
+
+test("no checkable profile fails closed", () => {
+  eq(N.enterpriseConnectPlan(""), { action: "edit", uuid: "" })
+  eq(N.enterpriseConnectPlan(undefined), { action: "edit", uuid: "" })
+  eq(N.enterpriseConnectPlan("not-a-uuid\t/etc/ca.pem\t\tno\texample.org\t\t"), { action: "edit", uuid: "" })
+  eq(N.enterpriseConnectPlan(U1 + "\t/etc/ca.pem"), { action: "edit", uuid: "" })
+})
+
+test("nmtui command only ever carries a uuid", () => {
+  eq(N.enterpriseEditCommand({ action: "edit", uuid: U1 }), "omarchy-launch-tui --app-id=TUI.float nmtui edit " + U1)
+  eq(N.enterpriseEditCommand({ action: "edit", uuid: "" }), "omarchy-launch-tui --app-id=TUI.float nmtui edit")
+  eq(N.enterpriseEditCommand({ action: "edit", uuid: "x; rm -rf ~" }), "omarchy-launch-tui --app-id=TUI.float nmtui edit")
+})
+
 console.log(passed + " passed, " + failed + " failed")
 process.exit(failed === 0 ? 0 : 1)

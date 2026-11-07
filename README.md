@@ -17,8 +17,9 @@ switcher.
     **Signal** (dBm) and **Link Rate**.
   - Wi-Fi networks, then the Wi-Fi band when there is a choice. Picking a new
     enterprise (802.1X) network opens `nmtui` in a floating terminal, where you
-    set it up with its CA certificate and server domain; saved enterprise
-    networks connect from the popup as usual. The stock popup signs in from
+    set it up with its CA certificate and server domain. A saved enterprise
+    network connects from the popup only if its profile has both; otherwise
+    `nmtui` opens on that profile so you can add them. The stock popup signs in from
     the popup but trusts any server
     ([omacom/omarchy#13922](https://github.com/omacom/omarchy/issues/13922)).
   - DNS provider.

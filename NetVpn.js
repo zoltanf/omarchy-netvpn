@@ -314,3 +314,36 @@ function vpnFoldSummary(barSummary, singleTool, connectedSummary, anyConnected) 
   if (singleTool && anyConnected) return viaText(connectedSummary, true)
   return String(barSummary || "")
 }
+
+// netvpn: a saved 802.1X profile connects from the popup only when it pins the
+// authentication server: a CA (ca-cert, ca-path or the system store) and the
+// server's name (domain-suffix-match, domain-match or altsubject-matches).
+// Without both, a fake access point can collect the login for offline
+// guessing; 0.3.0 and the stock panel created such profiles. raw is the output
+// of bin/netvpn-eap-check. Anything else, including no profile at all, opens
+// nmtui: the popup never connects an enterprise network it could not check.
+var UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+
+function enterpriseConnectPlan(raw) {
+  var lines = String(raw || "").split("\n")
+  var found = 0
+  function isSet(value) {
+    var v = String(value || "").trim()
+    return v !== "" && v !== "--"
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var f = lines[i].split("\t")
+    if (f.length < 7 || !UUID_PATTERN.test(f[0])) continue
+    found += 1
+    var ca = isSet(f[1]) || isSet(f[2]) || String(f[3]).trim() === "yes"
+    var server = isSet(f[4]) || isSet(f[5]) || isSet(f[6])
+    if (!ca || !server) return { action: "edit", uuid: f[0] }
+  }
+  return found > 0 ? { action: "connect", uuid: "" } : { action: "edit", uuid: "" }
+}
+
+// The nmtui command for a plan; the uuid was checked against UUID_PATTERN.
+function enterpriseEditCommand(plan) {
+  var uuid = plan && UUID_PATTERN.test(String(plan.uuid || "")) ? " " + plan.uuid : ""
+  return "omarchy-launch-tui --app-id=TUI.float nmtui edit" + uuid
+}

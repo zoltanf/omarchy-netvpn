@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# netvpn: lists the saved NetworkManager Wi-Fi profiles for one SSID with the
+# 802.1X settings that pin the authentication server. Read-only.
+#   netvpn-eap-check <ssid>
+# One line per profile, tab-separated: uuid, ca-cert, ca-path,
+# system-ca-certs, domain-suffix-match, domain-match, altsubject-matches.
+# NetVpn.enterpriseConnectPlan() decides what the popup does with it.
+set -u
+ssid=${1-}
+[[ -n $ssid ]] || exit 2
+fields=(ca-cert ca-path system-ca-certs domain-suffix-match domain-match altsubject-matches)
+nmcli -e no -g UUID,TYPE connection show </dev/null | while IFS=: read -r uuid type; do
+  [[ $type == 802-11-wireless ]] || continue
+  [[ "$(nmcli -e no -g 802-11-wireless.ssid connection show "$uuid" </dev/null)" == "$ssid" ]] || continue
+  line=$uuid
+  for f in "${fields[@]}"; do
+    v=$(nmcli -e no -g "802-1x.$f" connection show "$uuid" </dev/null 2>/dev/null | head -c 512 | tr '\t\n' '  ')
+    line+=$'\t'$v
+  done
+  printf '%s\n' "$line"
+done

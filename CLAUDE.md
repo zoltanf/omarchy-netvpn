@@ -73,6 +73,17 @@ screenshots of the author's machine out of it.
   nmtui command opens floating (875×600). Not exercised: clicking a real
   enterprise row (none in range). If #13947 is merged upstream, merging it
   could bring in-popup sign-in back.
+- 0.3.2 (2026-11-07): review follow-up on #14194: a *saved* PEAP profile
+  without CA/server-domain trust (made by the old popup) still reconnected
+  from the known-network branch. `connectKnown()` now runs
+  `bin/netvpn-eap-check <ssid>` (read-only nmcli, SSID as argv) for
+  enterprise rows; `NetVpn.enterpriseConnectPlan()` connects only when every
+  profile for the SSID has a CA (`ca-cert`, `ca-path` or
+  `system-ca-certs=yes`) and a server name (`domain-suffix-match`,
+  `domain-match` or `altsubject-matches`), else opens `nmtui edit <uuid>`
+  (nmtui accepts a UUID, verified). Fails closed. Verified with two temporary
+  nmcli test profiles (deleted afterwards) and `tests/run.js`; not exercised:
+  clicking a real enterprise row (none in range).
 
 ## Dead ends / gotchas
 

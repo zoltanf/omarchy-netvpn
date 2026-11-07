@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2 — 2026-11-07
+
+- A saved enterprise (802.1X) network connects from the popup only when its
+  profile pins the authentication server: a CA certificate (a file, a folder
+  or the system store) and the server's name (domain or subject match).
+  Otherwise `nmtui` opens on that profile. Profiles made by 0.3.0 and earlier,
+  or by the stock popup, trust any server, so reconnecting them could still
+  hand the login to a fake access point. The check is read-only `nmcli`
+  (`bin/netvpn-eap-check`); if it cannot read the profile, nmtui opens.
+
 ## 0.3.1 — 2026-11-07
 
 - New enterprise (802.1X) Wi-Fi networks are set up in `nmtui` (opened in a
