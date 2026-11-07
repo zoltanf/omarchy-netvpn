@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
-# netvpn: lists the saved NetworkManager Wi-Fi profiles for one SSID with the
-# 802.1X settings that pin the authentication server. Read-only.
+# netvpn: lists the saved NetworkManager Wi-Fi profiles for one SSID with their
+# key management and the 802.1X settings that pin the authentication server.
+# Read-only, one nmcli call per profile, no secrets requested.
 #   netvpn-eap-check <ssid>
-# One line per profile, tab-separated: uuid, ca-cert, ca-path,
+# One line per profile, tab-separated: uuid, key-mgmt, ca-cert, ca-path,
 # system-ca-certs, domain-suffix-match, domain-match, altsubject-matches.
 # NetVpn.enterpriseConnectPlan() decides what the popup does with it.
 set -u
 ssid=${1-}
 [[ -n $ssid ]] || exit 2
-fields=(ca-cert ca-path system-ca-certs domain-suffix-match domain-match altsubject-matches)
+props=802-11-wireless.ssid,802-11-wireless-security.key-mgmt
+props+=,802-1x.ca-cert,802-1x.ca-path,802-1x.system-ca-certs
+props+=,802-1x.domain-suffix-match,802-1x.domain-match,802-1x.altsubject-matches
 nmcli -e no -g UUID,TYPE connection show </dev/null | while IFS=: read -r uuid type; do
   [[ $type == 802-11-wireless ]] || continue
-  [[ "$(nmcli -e no -g 802-11-wireless.ssid connection show "$uuid" </dev/null)" == "$ssid" ]] || continue
-  line=$uuid
-  for f in "${fields[@]}"; do
-    v=$(nmcli -e no -g "802-1x.$f" connection show "$uuid" </dev/null 2>/dev/null | head -c 512 | tr '\t\n' '  ')
-    line+=$'\t'$v
-  done
-  printf '%s\n' "$line"
+  # "property:value" lines; a setting the profile lacks is left out. The SSID
+  # and uuid reach awk through the environment, so no escapes are applied.
+  nmcli -e no -t -f "$props" connection show "$uuid" </dev/null 2>/dev/null |
+    SSID=$ssid UUID=$uuid awk '
+      { i = index($0, ":"); if (i) { v = substr($0, i + 1); gsub(/\t/, " ", v); val[substr($0, 1, i - 1)] = v } }
+      END {
+        if (val["802-11-wireless.ssid"] != ENVIRON["SSID"]) exit
+        n = split("802-11-wireless-security.key-mgmt 802-1x.ca-cert 802-1x.ca-path 802-1x.system-ca-certs 802-1x.domain-suffix-match 802-1x.domain-match 802-1x.altsubject-matches", f, " ")
+        line = ENVIRON["UUID"]
+        for (j = 1; j <= n; j++) line = line "\t" substr(val[f[j]], 1, 512)
+        print line
+      }'
 done

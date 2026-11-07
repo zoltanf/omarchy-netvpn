@@ -84,6 +84,20 @@ screenshots of the author's machine out of it.
   (nmtui accepts a UUID, verified). Fails closed. Verified with two temporary
   nmcli test profiles (deleted afterwards) and `tests/run.js`; not exercised:
   clicking a real enterprise row (none in range).
+- 0.3.3 (2026-11-07), after a Fable review of 0.3.2: the gate keyed on the
+  AP's advertised security (`isEnterpriseSecurity`), which an evil twin
+  controls (Suite-B-192 → `Wpa3SuiteB192` skipped the check; Quickshell's
+  `connect()` activates the profile with the newest `connection.timestamp`).
+  Now `connectKnown()` checks **every** saved row; the script also emits
+  `802-11-wireless-security.key-mgmt` (one `nmcli -t -f` call per profile,
+  ~50 ms), and only `wpa-eap`, `wpa-eap-suite-b-192`, `ieee8021x` profiles
+  need CA + server name. `actionKind = "check"` shows "Checking…"; result is
+  dropped if the popup closed; 30 s timeout → "Could not check the saved
+  profile". `eapCheckPath` is `decodeURIComponent`'d (shell builds plugin URLs
+  percent-encoded). Left alone by decision: NM autoconnect of an untrusted
+  profile (documented in README/CHANGELOG; changing it would be a new system
+  write). Verified: tests, three temporary nmcli profiles (deleted); not
+  exercised: clicking a saved row (only one saved Wi-Fi here, the connected one).
 
 ## Dead ends / gotchas
 

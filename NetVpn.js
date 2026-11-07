@@ -315,14 +315,19 @@ function vpnFoldSummary(barSummary, singleTool, connectedSummary, anyConnected) 
   return String(barSummary || "")
 }
 
-// netvpn: a saved 802.1X profile connects from the popup only when it pins the
-// authentication server: a CA (ca-cert, ca-path or the system store) and the
-// server's name (domain-suffix-match, domain-match or altsubject-matches).
-// Without both, a fake access point can collect the login for offline
-// guessing; 0.3.0 and the stock panel created such profiles. raw is the output
-// of bin/netvpn-eap-check. Anything else, including no profile at all, opens
-// nmtui: the popup never connects an enterprise network it could not check.
+// netvpn: a saved network connects from the popup only when none of its
+// profiles is an 802.1X one that leaves the authentication server unpinned.
+// Pinned means a CA (ca-cert, ca-path or the system store) and the server's
+// name (domain-suffix-match, domain-match or altsubject-matches). Without both,
+// a fake access point can collect the login for offline guessing; 0.3.0 and
+// the stock panel created such profiles. The decision rests on each saved
+// profile's own key-mgmt, never on what the access point advertises, which an
+// impostor controls. raw is the output of bin/netvpn-eap-check. If no profile
+// could be read, nmtui opens: the popup never connects what it could not check.
+// Over-strict on purpose: EAP-PWD and EAP-TLS profiles without a server name
+// also go to nmtui.
 var UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+var ENTERPRISE_KEY_MGMT = ["wpa-eap", "wpa-eap-suite-b-192", "ieee8021x"]
 
 function enterpriseConnectPlan(raw) {
   var lines = String(raw || "").split("\n")
@@ -333,10 +338,11 @@ function enterpriseConnectPlan(raw) {
   }
   for (var i = 0; i < lines.length; i++) {
     var f = lines[i].split("\t")
-    if (f.length < 7 || !UUID_PATTERN.test(f[0])) continue
+    if (f.length < 8 || !UUID_PATTERN.test(f[0])) continue
     found += 1
-    var ca = isSet(f[1]) || isSet(f[2]) || String(f[3]).trim() === "yes"
-    var server = isSet(f[4]) || isSet(f[5]) || isSet(f[6])
+    if (ENTERPRISE_KEY_MGMT.indexOf(String(f[1]).trim()) === -1) continue
+    var ca = isSet(f[2]) || isSet(f[3]) || String(f[4]).trim() === "yes"
+    var server = isSet(f[5]) || isSet(f[6]) || isSet(f[7])
     if (!ca || !server) return { action: "edit", uuid: f[0] }
   }
   return found > 0 ? { action: "connect", uuid: "" } : { action: "edit", uuid: "" }

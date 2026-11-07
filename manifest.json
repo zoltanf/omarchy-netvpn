@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "zoltanf.netvpn",
   "name": "Network + VPN",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "author": "Zoltan Fekete",
   "license": "MIT",
   "description": "Omarchy's Wi-Fi/Ethernet widget with VPN status and switching folded in: one bar icon, one popup.",

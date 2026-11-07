@@ -19,7 +19,9 @@ switcher.
     enterprise (802.1X) network opens `nmtui` in a floating terminal, where you
     set it up with its CA certificate and server domain. A saved enterprise
     network connects from the popup only if its profile has both; otherwise
-    `nmtui` opens on that profile so you can add them. The stock popup signs in from
+    `nmtui` opens on that profile so you can add them (or forget it there).
+    NetworkManager's own autoconnect is not changed: fix or forget such a
+    profile, or NetworkManager may still join it by itself. The stock popup signs in from
     the popup but trusts any server
     ([omacom/omarchy#13922](https://github.com/omacom/omarchy/issues/13922)).
   - DNS provider.

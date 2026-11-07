@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.3 — 2026-11-07
+
+- The saved-network check now runs for every saved network and looks at the
+  saved profile's own type, not at what the access point advertises. In 0.3.2
+  a fake access point could label itself WPA3-Enterprise (Suite-B-192), skip
+  the check and get an old untrusted profile reconnected.
+- New networks that advertise Suite-B-192, dynamic WEP, LEAP or an unknown
+  security type also open `nmtui` instead of the password field.
+- The row shows "Checking…" while the profile is read. Closing the popup
+  during the check cancels the connect.
+- The check script is found even when the plugin's folder name has spaces.
+- Not changed: NetworkManager's own autoconnect. An untrusted profile can
+  still be joined by NetworkManager itself until you fix or forget it in
+  `nmtui`. EAP-PWD and EAP-TLS profiles without a server name also open
+  `nmtui` (stricter than needed, on purpose).
+
 ## 0.3.2 — 2026-11-07
 
 - A saved enterprise (802.1X) network connects from the popup only when its

@@ -315,7 +315,7 @@ Panel {
   // comparisons on the matching `*Kind`/`*Reason` being non-empty so a
   // hidden-SSID row (ssid == "") doesn't collide with the "" defaults.
   property string actionSsid: ""
-  property string actionKind: ""  // "connect" | "disconnect" | "forget"
+  property string actionKind: ""  // "connect" | "disconnect" | "forget" | "check"
   property string failureSsid: ""
   property string failureReason: ""
   property string passwordSsid: ""
@@ -979,8 +979,12 @@ Panel {
   // a PEAP profile that trusted any server (omacom/omarchy#13922). A saved
   // enterprise profile connects from the panel only if it pins the server
   // (connectKnown); otherwise nmtui opens on that profile.
+  // What the access point advertises, so only for new networks: whether a
+  // saved one may connect is decided from its profile (connectKnown).
   function isEnterpriseSecurity(security) {
     return security === WifiSecurityType.Wpa2Eap || security === WifiSecurityType.WpaEap
+        || security === WifiSecurityType.Wpa3SuiteB192 || security === WifiSecurityType.DynamicWep
+        || security === WifiSecurityType.Leap || security === WifiSecurityType.Unknown
   }
 
   function askCredentials(net) {
@@ -993,24 +997,31 @@ Panel {
     root.close()
   }
 
-  // netvpn: a saved row connects at once, except an enterprise one, whose
-  // profile is checked first (bin/netvpn-eap-check, read-only nmcli).
-  readonly property string eapCheckPath: Qt.resolvedUrl("bin/netvpn-eap-check").toString().replace(/^file:\/\//, "")
-  property string eapCheckSsid: ""
+  // netvpn: a saved row's profiles are checked before it connects
+  // (bin/netvpn-eap-check, read-only nmcli; NetVpn.enterpriseConnectPlan).
+  // Every saved row, not only the ones the access point labels enterprise:
+  // an impostor picks its own label. The row shows "Checking…" meanwhile.
+  readonly property string eapCheckPath: decodeURIComponent(Qt.resolvedUrl("bin/netvpn-eap-check").toString().replace(/^file:\/\//, ""))
 
   function connectKnown(net) {
-    if (!isEnterpriseSecurity(net.security)) return connectDirectly(net.ssid)
-    if (eapCheckProc.running) return
-    eapCheckSsid = net.ssid
+    if (actionKind !== "" || !net || !net.ssid) return
+    actionSsid = net.ssid
+    actionKind = "check"
+    failureSsid = ""
+    failureReason = ""
+    actionTimeout.restart()
     // The SSID is an argument, never part of a shell string.
     eapCheckProc.command = ["/usr/bin/bash", eapCheckPath, net.ssid]
     eapCheckProc.running = true
   }
 
   function finishEnterpriseCheck(text) {
-    var ssid = eapCheckSsid
-    eapCheckSsid = ""
-    if (!ssid) return
+    if (actionKind !== "check") return  // timed out meanwhile
+    var ssid = actionSsid
+    actionTimeout.stop()
+    actionSsid = ""
+    actionKind = ""
+    if (!root.opened) return  // closed while checking: do nothing
     var plan = NetVpn.enterpriseConnectPlan(text)
     if (plan.action === "connect") connectDirectly(ssid)
     else openEnterpriseEditor(plan)
@@ -1256,6 +1267,7 @@ Panel {
       var reason
       if (root.actionKind === "connect") reason = "Timed out connecting"
       else if (root.actionKind === "disconnect") reason = "Timed out disconnecting"
+      else if (root.actionKind === "check") reason = "Could not check the saved profile"
       else reason = "Timed out forgetting"
       root.failureSsid = root.actionSsid
       root.failureReason = reason
@@ -2096,6 +2108,7 @@ Panel {
       if (isBusy && root.actionKind === "connect") return "Connecting…"
       if (isBusy && root.actionKind === "disconnect") return "Disconnecting…"
       if (isBusy && root.actionKind === "forget") return "Forgetting…"
+      if (isBusy && root.actionKind === "check") return "Checking…"
       if (isFailed) return root.failureReason || "Failed"
       if (isConnected) return "Connected"
       return ""
