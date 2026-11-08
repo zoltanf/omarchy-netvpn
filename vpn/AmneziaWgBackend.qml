@@ -258,6 +258,10 @@ Item {
       "mkdir -m 0700 -p " + Util.shellQuote(root.profilesDir) + " 2>/dev/null; " +
       "for f in " + Util.shellQuote(root.profilesDir) + "/*.conf /etc/amnezia/amneziawg/*.conf; do " +
       "  [[ -r \"$f\" ]] || continue; " +
+      // A file name with a newline or other control character would forge
+      // lines in this listing (an extra `#awg-profile` header, a stray flag),
+      // so such files are not listed at all.
+      "  [[ $f == *[[:cntrl:]]* ]] && continue; " +
       "  printf \"#awg-profile %s\\n\" \"$f\"; " +
       // Raw-byte check, before sed or QML decode anything: delete tab, LF, CR
       // and every printable or non-ASCII byte; whatever is left is a control

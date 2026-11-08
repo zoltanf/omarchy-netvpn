@@ -109,7 +109,10 @@ screenshots of the author's machine out of it.
   control bytes instead of mirroring each Bash rule. Verified: the real
   listing command (extracted from the QML) on NUL, VT, UTF-8+CRLF and plain
   test files; vpn/tests 152 pass. Not exercised: connecting a real AmneziaWG
-  profile (none installed here).
+  profile (none installed here). A Fable security review found no bypass
+  (whitespace, case folding, invalid UTF-8, marker spoofing all checked) and
+  one pre-existing Low: a file name with a newline forged listing lines;
+  fixed the same day with `[[ $f == *[[:cntrl:]]* ]] && continue` in the loop.
 
 ## Dead ends / gotchas
 

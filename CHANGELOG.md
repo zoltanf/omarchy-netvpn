@@ -9,6 +9,9 @@
   profile list checks each file's raw bytes before reading it as text, and the
   parser checks the text again. The row reads "Blocked: contains hidden
   control characters". UTF-8 comments and CRLF line ends are unaffected.
+- AmneziaWG profile files whose name contains a newline or another control
+  character are no longer listed: such a name could add forged lines to the
+  profile listing.
 
 ## 0.3.3 — 2026-11-07
 
