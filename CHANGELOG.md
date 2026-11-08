@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 — 2026-11-08
+
+- AmneziaWG profiles that contain control characters (NUL bytes and the like,
+  anything other than tab, CR and LF) are blocked from connecting. awg-quick
+  reads profiles with Bash, which drops NUL bytes, so `Post<NUL>Up = …` hid a
+  root hook from the panel's hook check and awg-quick still ran it. The
+  profile list checks each file's raw bytes before reading it as text, and the
+  parser checks the text again. The row reads "Blocked: contains hidden
+  control characters". UTF-8 comments and CRLF line ends are unaffected.
+
 ## 0.3.3 — 2026-11-07
 
 - The saved-network check now runs for every saved network and looks at the

@@ -130,8 +130,10 @@ Item {
   function connectTo(target) {
     if (!_toolsPresent || _working || !target || !target.confFile) return
 
-    if (target.blocked || target.hasHooks) {
-      root.lastError = "Blocked: profile contains executable root hooks (PostUp/PreUp). Remove hooks to connect."
+    if (target.blocked || target.hasHooks || target.unsafeBytes) {
+      root.lastError = target.unsafeBytes
+        ? "Blocked: profile contains hidden control characters (such as NUL bytes). Remove them to connect."
+        : "Blocked: profile contains executable root hooks (PostUp/PreUp). Remove hooks to connect."
       root.actionStatus = "Blocked for security"
       actionStatusTimer.restart()
       return
@@ -257,6 +259,10 @@ Item {
       "for f in " + Util.shellQuote(root.profilesDir) + "/*.conf /etc/amnezia/amneziawg/*.conf; do " +
       "  [[ -r \"$f\" ]] || continue; " +
       "  printf \"#awg-profile %s\\n\" \"$f\"; " +
+      // Raw-byte check, before sed or QML decode anything: delete tab, LF, CR
+      // and every printable or non-ASCII byte; whatever is left is a control
+      // byte (NUL included), and the profile is flagged. See AmneziaWg.js.
+      "  (( $(LC_ALL=C tr -d '\\t\\n\\r\\040-\\176\\200-\\377' < \"$f\" | wc -c) == 0 )) || echo '#awg-unsafe-bytes'; " +
       "  sed -E 's/^(.*(PrivateKey|PresharedKey)[[:space:]]*=).*$/\\1 [redacted]/I; s/^/\\t/' \"$f\"; " +
       "done"
     ]

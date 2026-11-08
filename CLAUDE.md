@@ -98,6 +98,18 @@ screenshots of the author's machine out of it.
   profile (documented in README/CHANGELOG; changing it would be a new system
   write). Verified: tests, three temporary nmcli profiles (deleted); not
   exercised: clicking a saved row (only one saved Wi-Fi here, the connected one).
+- 0.3.4 (2026-11-08), marketplace review (High): `Post<NUL>Up = …` in an
+  AmneziaWG profile passed `hasDangerousHooks()` (text sees key "post\0up"),
+  but awg-quick's `while read -r line` drops NUL (verified: Bash yields
+  `PostUp = …`), so the hook ran as root. Fix: the listing in
+  `AmneziaWgBackend.qml` runs `tr -d '\t\n\r\040-\176\200-\377' | wc -c`
+  on each file's raw bytes and prints `#awg-unsafe-bytes` after the header if
+  anything is left; `parseConf()` also rejects C0 controls/DEL in the decoded
+  text (`unsafeBytes`), and `awgTargets()` marks the row blocked. Blocking all
+  control bytes instead of mirroring each Bash rule. Verified: the real
+  listing command (extracted from the QML) on NUL, VT, UTF-8+CRLF and plain
+  test files; vpn/tests 152 pass. Not exercised: connecting a real AmneziaWG
+  profile (none installed here).
 
 ## Dead ends / gotchas
 

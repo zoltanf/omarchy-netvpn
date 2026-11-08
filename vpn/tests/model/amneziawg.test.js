@@ -70,7 +70,7 @@ test("hasDangerousHooks follows awg-quick on case, comments and near-misses", ()
 
 test("parseConf reads endpoints and the default route off the config", () => {
   const conf = AmneziaWg.parseConf("[Peer]\nEndpoint = 203.0.113.9:51820\nAllowedIPs = 0.0.0.0/0, ::/0")
-  eq(conf, { hasHooks: false, endpoints: ["203.0.113.9:51820"], defaultRoute: true })
+  eq(conf, { hasHooks: false, unsafeBytes: false, endpoints: ["203.0.113.9:51820"], defaultRoute: true })
   eq(AmneziaWg.parseConf("[Peer]\nAllowedIPs = 10.10.0.0/24").defaultRoute, false)
 })
 
@@ -80,12 +80,14 @@ test("parseProfileBundle splits the listing into profiles and reads each config"
   eq(profiles[0], {
     path: "/tmp/awgtest/profiles/evil.conf",
     hasHooks: true,
+    unsafeBytes: false,
     endpoints: [],
     defaultRoute: false
   })
   eq(profiles[1], {
     path: "/tmp/awgtest/profiles/home.conf",
     hasHooks: false,
+    unsafeBytes: false,
     endpoints: ["203.0.113.9:51820"],
     defaultRoute: true
   })
@@ -99,6 +101,60 @@ test("parseProfileBundle ignores a config line that looks like a header", () => 
   ].join("\n"))
   eq(profiles.length, 1)
   eq(profiles[0].endpoints, ["1.2.3.4:51820"])
+})
+
+// awg-quick reads the config with Bash's `read`, which drops NUL bytes, so
+// "Post\0Up" is a PostUp hook to it. Verified: `while read -r line` over such a
+// file yields "PostUp = ...". The listing flags the raw bytes; the parser also
+// checks the decoded text.
+test("parseProfileBundle blocks a profile the listing flagged for control bytes", () => {
+  const profiles = AmneziaWg.parseProfileBundle([
+    "#awg-profile /p/nul.conf",
+    "#awg-unsafe-bytes",
+    "\t[Interface]",
+    "\tPost\u0000Up = id > /tmp/pwned",
+    "#awg-profile /p/home.conf",
+    "\t[Interface]",
+    "\tAddress = 10.8.1.2/24"
+  ].join("\n"))
+  eq(profiles.map(p => [p.path, p.hasHooks, p.unsafeBytes]),
+     [["/p/nul.conf", false, true], ["/p/home.conf", false, false]])
+})
+
+test("parseProfileBundle blocks control bytes that reach the decoded text", () => {
+  for (const ch of ["\u0000", "\u0001", "\u000b", "\u000c", "\u001b", "\u007f"]) {
+    const profiles = AmneziaWg.parseProfileBundle(
+      "#awg-profile /p/x.conf\n\t[Interface]\n\tPost" + ch + "Up = id")
+    eq(profiles[0].unsafeBytes, true)
+  }
+})
+
+test("parseProfileBundle accepts tab, CR line ends and UTF-8 comments", () => {
+  const profiles = AmneziaWg.parseProfileBundle([
+    "#awg-profile /p/büro.conf",
+    "\t# Büro VPN\r",
+    "\t[Interface]\r",
+    "\tAddress\t=\t10.8.1.2/24\r"
+  ].join("\n"))
+  eq(profiles[0].unsafeBytes, false)
+  eq(profiles[0].hasHooks, false)
+})
+
+test("parseProfileBundle ignores an unsafe-bytes flag before any profile", () => {
+  const profiles = AmneziaWg.parseProfileBundle(
+    "#awg-unsafe-bytes\n#awg-profile /p/home.conf\n\tAddress = 10.8.1.2/24")
+  eq(profiles[0].unsafeBytes, false)
+})
+
+test("awgTargets shows a control-byte profile as blocked", () => {
+  const targets = AmneziaWg.awgTargets(AmneziaWg.buildProfiles(
+    [{ path: "/p/nul.conf", hasHooks: false, unsafeBytes: true, endpoints: [], defaultRoute: false },
+     { path: "/p/home.conf", hasHooks: false, unsafeBytes: false, endpoints: [], defaultRoute: false }], []))
+  eq(targets[0].blocked, true)
+  eq(targets[0].unsafeBytes, true)
+  eq(targets[0].detail, "Blocked: contains hidden control characters")
+  eq(targets[0].glyph, Shared.GLYPH_SHIELD_LOCK)
+  eq(targets[1].blocked, false)
 })
 
 test("parseProfileBundle survives an empty listing", () => {
@@ -127,6 +183,7 @@ test("buildProfiles gives an interface with no readable config a row of its own"
     name: "work",
     confFile: "work",
     hasHooks: false,
+    unsafeBytes: false,
     endpoints: [],
     defaultRoute: false,
     external: true,

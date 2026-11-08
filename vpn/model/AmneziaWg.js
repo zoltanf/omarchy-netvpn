@@ -69,6 +69,19 @@ function hasDangerousHooks(confText) {
   return false
 }
 
+// Control characters other than tab, CR and LF. awg-quick reads the config
+// with Bash's `read`, which drops NUL bytes without a word, so `Post<NUL>Up =`
+// is a PostUp hook to awg-quick while every text-level check here sees an
+// unknown key. No real profile contains such a byte, so a profile with one is
+// refused outright instead of trying to mirror each byte rule of Bash. The
+// listing checks the raw bytes before anything decodes them (see
+// AmneziaWgBackend.qml); this repeats the check on the decoded text in case a
+// byte survives into it.
+var UNSAFE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/
+function hasUnsafeChars(confText) {
+  return UNSAFE_CHARS.test(String(confText || ""))
+}
+
 // Everything the panel needs to know about one profile, read from the config
 // itself: whether connecting to it would run root hooks, where it goes, and
 // whether it carries the default route. A config can hold several `[Peer]`
@@ -90,7 +103,12 @@ function parseConf(confText) {
       }
     }
   }
-  return { hasHooks: hasDangerousHooks(confText), endpoints: endpoints, defaultRoute: defaultRoute }
+  return {
+    hasHooks: hasDangerousHooks(confText),
+    unsafeBytes: hasUnsafeChars(confText),
+    endpoints: endpoints,
+    defaultRoute: defaultRoute
+  }
 }
 
 // The backend's listProcess concatenates every readable profile into one
@@ -103,10 +121,16 @@ function parseProfileBundle(raw) {
   var lines = String(raw || "").split("\n")
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i]
+    // The listing's own flag for a file whose raw bytes failed the check. It
+    // starts in column 0, which no config line can: those are tab-indented.
+    if (line === "#awg-unsafe-bytes") {
+      if (current) current.unsafeBytes = true
+      continue
+    }
     if (line.indexOf("#awg-profile ") === 0) {
       var path = line.substring("#awg-profile ".length).trim()
       if (path === "") { current = null; continue }
-      current = { path: path, text: [] }
+      current = { path: path, text: [], unsafeBytes: false }
       entries.push(current)
       continue
     }
@@ -119,6 +143,7 @@ function parseProfileBundle(raw) {
     profiles.push({
       path: entries[k].path,
       hasHooks: conf.hasHooks,
+      unsafeBytes: entries[k].unsafeBytes || conf.unsafeBytes,
       endpoints: conf.endpoints,
       defaultRoute: conf.defaultRoute
     })
@@ -158,6 +183,7 @@ function buildProfiles(entries, upInterfaces) {
       name: name,
       confFile: entries[i].path,
       hasHooks: entries[i].hasHooks === true,
+      unsafeBytes: entries[i].unsafeBytes === true,
       endpoints: entries[i].endpoints || [],
       defaultRoute: entries[i].defaultRoute === true,
       external: false,
@@ -171,6 +197,7 @@ function buildProfiles(entries, upInterfaces) {
       name: up[j],
       confFile: up[j],
       hasHooks: false,
+      unsafeBytes: false,
       endpoints: [],
       defaultRoute: false,
       external: true,
@@ -246,21 +273,24 @@ function awgTargets(profiles) {
   for (var i = 0; i < profiles.length; i++) {
     var profile = profiles[i]
     var detailText = "AmneziaWG profile"
-    if (profile.hasHooks) detailText = "Blocked: contains root hooks"
+    var blocked = profile.hasHooks === true || profile.unsafeBytes === true
+    if (profile.unsafeBytes) detailText = "Blocked: contains hidden control characters"
+    else if (profile.hasHooks) detailText = "Blocked: contains root hooks"
     else if (profile.external) detailText = profile.active ? "Connected · started outside the widget" : "Started outside the widget"
     else if (profile.active) detailText = "Connected"
     targets.push({
       key: "profile:" + profile.name,
       label: profile.name,
       detail: detailText,
-      glyph: profile.hasHooks ? Shared.GLYPH_SHIELD_LOCK : Shared.GLYPH_SHIELD,
+      glyph: blocked ? Shared.GLYPH_SHIELD_LOCK : Shared.GLYPH_SHIELD,
       confFile: profile.confFile,
       active: profile.active === true,
       external: profile.external === true,
       hasHooks: profile.hasHooks === true,
+      unsafeBytes: profile.unsafeBytes === true,
       // Part of the target contract: the panel draws a blocked row dimmed, so a
       // profile that cannot be connected does not look like one that can.
-      blocked: profile.hasHooks === true
+      blocked: blocked
     })
   }
   return targets
